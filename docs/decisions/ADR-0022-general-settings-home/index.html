@@ -1,0 +1,41 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ADR-0022 — General settings live in the user&#39;s fluid home · fluid-coding</title><meta name="description" content="- Status: accepted"><meta property="og:title" content="ADR-0022 — General settings live in the user's fluid home · fluid-coding"><meta property="og:description" content="- Status: accepted"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> ADR-0022 — General settings live in the user&#39;s fluid home</nav><article class="prose"><h1 id="adr-0022--general-settings-live-in-the-users-fluid-home">ADR-0022 — General settings live in the user’s fluid home</h1>
+<ul>
+<li>Status: accepted</li>
+<li>Date: 2026-11-25</li>
+<li>Amends: <a href="/fluid-coding-site/docs/decisions/ADR-0021-forge-home-outside-workspace/">ADR-0021</a></li>
+</ul>
+<h2 id="context">Context</h2>
+<p><code>PATCH /api/settings/general</code> failed in the installed macOS app with <code>general settings I/O error: Read-only file system (os error 30)</code>. <code>home_from_environment()</code> resolved the settings file to
+<code>FLUID_WORKSPACE/.fluid-home</code> or, when the welcome window opened without a workspace, to
+<code>./.fluid-home</code>. An <code>.app</code> launched from Finder starts with <code>/</code> as its working directory; on a
+sealed macOS system volume that directory is read-only, so <code>create_dir_all</code> failed before any
+settings were written.</p>
+<p>Forge secrets (<code>~/.fluid-coding/forge</code>) and the project index (<code>~/.fluid-coding/projects.json</code>)
+already resolve from <code>FLUID_CODING_HOME</code> or <code>HOME</code>. Machine-level settings were the outlier: they
+were tied to a checkout or to the current directory, even though an LLM choice and a theme are
+properties of the machine, not of a project.</p>
+<h2 id="decision">Decision</h2>
+<p>The general settings file resolves to:</p>
+<ol>
+<li><code>FLUID_CODING_HOME/.fluid-coding/general-settings.json</code> when the variable is set;</li>
+<li><code>HOME/.fluid-coding/general-settings.json</code> otherwise;</li>
+<li><code>&lt;FLUID_WORKSPACE&gt;/.fluid-home/.fluid-coding/general-settings.json</code> when neither variable is
+available;</li>
+<li><code>./.fluid-home/.fluid-coding/general-settings.json</code> as the last resort.</li>
+</ol>
+<p>The path is resolved once in <code>AppState</code> and passed to the settings routes; request handlers no
+longer read the working directory or resolve environment variables into a path. I/O errors name
+the path that failed, and a failed write returns <code>500</code>, not <code>400</code>.</p>
+<h2 id="consequences">Consequences</h2>
+<ul>
+<li>Saving General settings works in the installed macOS app, with or without a configured project,
+and never writes into a checkout.</li>
+<li>Resolution is a pure function with tests for the override, user-home and workspace fallbacks.</li>
+<li>Route tests inject their own <code>AppState</code>, so they cannot read or overwrite a developer’s real
+settings.</li>
+<li>Settings written to the old locations are not migrated. A tester may need to choose the provider,
+theme and rail position once again after upgrading; as in ADR-0021 this prerelease has no
+migration step.</li>
+<li><code>FLUID_CODING_HOME</code> remains the single override for relocating user state and for test isolation.</li>
+</ul>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/decisions/ADR-0022-general-settings-home.md">docs/decisions/ADR-0022-general-settings-home.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — a local workbench for reviewing agent-written code.</span><nav class="footer-links" aria-label="Footer navigation"><a class="footer-docs" href="/fluid-coding-site/docs/">Documentation</a><a href="https://github.com/badetitou/fluid-coding">GitHub ↗</a></nav></div></footer></body></html>

@@ -42,10 +42,13 @@ a file with an executable bit (on Unix); directories and non-executable files ar
 blank values and shell metacharacters (<code>; &amp; | $ \</code> newlines quotes <code>&lt; &gt;</code>) are rejected.</li>
 <li><strong>Selection</strong> chooses the provider whose effective command is shown; with no selection the
 effective command is the documented default <code>claude -p</code>.</li>
-<li><strong>Storage</strong>: <code>&lt;home&gt;/general-settings.json</code>, version <code>1</code>, with <code>selected</code> and <code>commands</code>.
-<code>&lt;home&gt;</code> is <code>FLUID_CODING_HOME</code>, otherwise <code>&lt;FLUID_WORKSPACE&gt;/.fluid-home</code>, otherwise
-<code>./.fluid-home</code>. A missing or invalid file falls back to defaults; writes are atomic
-(temp file + rename) and contain no secrets.</li>
+<li><strong>Storage</strong>: <code>&lt;home&gt;/.fluid-coding/general-settings.json</code>, version <code>1</code>, with <code>selected</code>,
+<code>commands</code>, <code>theme</code> and <code>railPosition</code>. <code>&lt;home&gt;</code> is <code>FLUID_CODING_HOME</code>, otherwise <code>HOME</code>, with
+<code>&lt;FLUID_WORKSPACE&gt;/.fluid-home</code> and <code>./.fluid-home</code> as last-resort fallbacks
+(<a href="/fluid-coding-site/docs/decisions/ADR-0022-general-settings-home/">ADR-0022</a>). This keeps machine-level settings out
+of checkouts and out of the process working directory, which is read-only when the macOS app is
+launched from Finder. The path is resolved once at startup. A missing or invalid file falls back
+to defaults; writes are atomic (temp file + rename) and contain no secrets.</li>
 <li>Endpoints: <code>GET /api/settings/general</code> and <code>PATCH /api/settings/general</code>. Nothing is written
 until the user presses <strong>Save general settings</strong>.</li>
 </ul>
