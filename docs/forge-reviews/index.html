@@ -4,14 +4,19 @@ accounts. Reviews are read-only: the app fetches review facts and maps them to a
 runs the usual impact, risk and narrative pipeline. It never posts comments or approves anything.</p>
 <p>See <a href="/fluid-coding-site/docs/decisions/ADR-0016-forge-accounts-and-review/">ADR-0016</a> for the contract and security model.</p>
 <h2 id="set-up-an-account">Set up an account</h2>
+<p>The easiest path is the <strong>Connect GitHub</strong> / <strong>Connect GitLab</strong> button on the Tasks page. The app
+embeds its public OAuth client ids, so no environment variable is needed: open the verification URL,
+approve the displayed code and the server stores the resulting token. See
+<a href="/fluid-coding-site/docs/decisions/ADR-0019-bundled-forge-client-ids/">ADR-0019</a>.</p>
+<p>A personal access token still works for Settings → Forge accounts:</p>
 <ol>
-<li>Create a personal access token with read access to code and pull/merge requests:
+<li>Create a token with read access to code and pull/merge requests:
 <ul>
 <li>GitHub: <code>repo</code> (or the equivalent fine-grained read permission).</li>
 <li>GitLab: <code>api</code> / <code>read_api</code> plus read access to the project.</li>
 </ul>
 </li>
-<li>In Settings → Forge accounts, choose <strong>GitHub</strong> or <strong>GitLab</strong>, enter a label (for example
+<li>Choose <strong>GitHub</strong> or <strong>GitLab</strong>, enter a label (for example
 <code>Work GitHub</code>), your username and the token.</li>
 <li>For self-hosted GitLab, set the base URL to the instance root, e.g.
 <code>https://gitlab.example.com</code>. Leave it empty for <code>gitlab.com</code>.</li>
@@ -36,7 +41,7 @@ The review body and commit messages are context, not evidence.</li>
 and the contract schemas reject any account response that contains one.</p>
 <h2 id="limits">Limits</h2>
 <ul>
-<li>PATs only. Device-code OAuth (<code>oauth_device</code>) is declared in the contract but not implemented.</li>
+<li>Device-code OAuth and PATs are supported; device sign-in is the default path. Both are read-only.</li>
 <li>Read-only. <code>forge:write</code> is a declared future capability for comments and approvals; nothing can
 post to a forge yet.</li>
 <li>GitHub and GitLab only; other forges need a new manifest and adapter.</li>
@@ -52,12 +57,13 @@ symbol keys, so <code>symbols</code>, <code>cells</code> and <code>tags</code> i
 <code>ForgeResponse</code> shapes; request fields and input are validated again on the server. Invalid input,
 invalid ids and unreachable upstream APIs produce 4xx responses with fixed messages. No error or
 response body ever contains a token.</p>
-<p>Accounts and tokens live under the forge folder of <code>FLUID_CODING_HOME</code>, or
-<code>&lt;workspace&gt;/.fluid-home/forge</code> when that variable is unset — never inside a project repository or
-<code>.fluid/</code>. Metadata is an atomically replaced <code>accounts.json</code>; each token is a separate file created
-with mode <code>0600</code> on Unix (and a <code>0700</code> directory). Removing an account deletes its token file. The
-read path only ever returns <code>ForgeAccount</code> records without a token field, and a <code>Debug</code> impl redacts
-tokens. <code>oauth_device</code> is rejected at the HTTP boundary and in the service; only PATs are stored.</p>
+<p>Accounts and tokens live at <code>FLUID_CODING_HOME/.fluid-coding/forge</code>, or <code>HOME/.fluid-coding/forge</code>
+when that variable is unset — never inside a project repository or <code>.fluid/</code>
+(<a href="/fluid-coding-site/docs/decisions/ADR-0021-forge-home-outside-workspace/">ADR-0021</a>). Metadata is an atomically
+replaced <code>accounts.json</code>; each token is a separate file created with mode <code>0600</code> on Unix (and a
+<code>0700</code> directory). Removing an account deletes its token file. The read path only ever returns
+<code>ForgeAccount</code> records without a token field, and a <code>Debug</code> impl redacts tokens. Both PATs and
+<code>oauth_device</code> account records are stored the same way.</p>
 <p>GitHub uses <code>api.github.com</code>, or <code>&lt;baseUrl&gt;/api/v3</code> for a GitHub Enterprise instance; GitLab uses
 <code>gitlab.com/api/v4</code>, or <code>&lt;baseUrl&gt;/api/v4</code> for self-hosted instances. An explicit <code>/api/v3</code> or
 <code>/api/v4</code> in <code>baseUrl</code> is used verbatim. Reviews are discovered from the account’s repositories or

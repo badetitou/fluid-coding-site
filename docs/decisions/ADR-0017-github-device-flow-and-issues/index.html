@@ -1,0 +1,39 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ADR-0017 — GitHub device flow and open issues as tasks · fluid-coding</title><meta name="description" content="- Status: accepted"><meta property="og:title" content="ADR-0017 — GitHub device flow and open issues as tasks · fluid-coding"><meta property="og:description" content="- Status: accepted"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> ADR-0017 — GitHub device flow and open issues as tasks</nav><article class="prose"><h1 id="adr-0017--github-device-flow-and-open-issues-as-tasks">ADR-0017 — GitHub device flow and open issues as tasks</h1>
+<ul>
+<li>Status: accepted</li>
+<li>Date: 2026-11-25</li>
+<li>Amended by: <a href="/fluid-coding-site/docs/decisions/ADR-0018-forge-device-flow-and-issue-sync/">ADR-0018</a>,
+<a href="/fluid-coding-site/docs/decisions/ADR-0019-bundled-forge-client-ids/">ADR-0019</a></li>
+</ul>
+<h2 id="context">Context</h2>
+<p>ADR-0016 kept forge auth PAT-only and left <code>oauth_device</code> for future work. Users should not have
+to create and paste a token: they should approve fluid on GitHub in the browser. A local desktop app
+cannot receive an OAuth redirect without a callback server and a client secret, so the device flow
+is the right fit: the user types a short code on github.com, and the server polls until approval.</p>
+<h2 id="decision">Decision</h2>
+<ul>
+<li>GitHub sign-in uses the OAuth <strong>device flow</strong>. The client id is read from <code>FLUID_GITHUB_CLIENT_ID</code>.
+No client secret is used or stored. The base URL is <code>https://github.com</code> (GitHub Enterprise is not
+covered yet).</li>
+<li>The OAuth token is stored like a PAT: a 0600 file in the forge store, never returned by any
+response. The account has <code>authMethod: oauth_device</code>. A second sign-in as the same user replaces the
+token of that account.</li>
+<li>Scope is <code>repo</code>, so private repositories’ issues are readable. This is broader than issue-only
+access; narrowing it is a follow-up once we know which repos matter.</li>
+<li>Open issues of the active repo’s <code>origin</code> (GitHub only) are merged into <code>GET /api/tasks</code> while a
+device-flow account exists. A failed fetch is an error response, never an empty board. Only the
+first page (100 issues) is fetched; pull requests are dropped.</li>
+<li>Endpoints: <code>POST /api/forge/github/device</code> starts the flow; <code>POST /api/forge/github/device/{id}</code>
+polls it. The poll handle is opaque, random, and bound to the server-side device code.</li>
+<li>GitLab is covered separately by ADR-0018.</li>
+</ul>
+<h2 id="consequences">Consequences</h2>
+<ul>
+<li>An OAuth App with device flow enabled had to be registered on GitHub. <a href="/fluid-coding-site/docs/decisions/ADR-0019-bundled-forge-client-ids/">ADR-0019</a>
+supersedes the environment-variable configuration: its public client id is now bundled in the app.</li>
+<li>The task board calls GitHub on every <code>/api/tasks</code> read while connected. There is no cache yet.</li>
+<li>Issue briefs for GitHub tasks are not generated (<code>/api/tasks/{key}/brief</code> only knows local tasks).</li>
+<li>Starting work on a GitHub issue uses its branch name only if the issue carries one: GitHub issues
+have no branch field, so <code>branch_name</code> derives one from the task.</li>
+</ul>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/decisions/ADR-0017-github-device-flow-and-issues.md">docs/decisions/ADR-0017-github-device-flow-and-issues.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — a local workbench for reviewing agent-written code.</span><nav class="footer-links" aria-label="Footer navigation"><a class="footer-docs" href="/fluid-coding-site/docs/">Documentation</a><a href="https://github.com/badetitou/fluid-coding">GitHub ↗</a></nav></div></footer></body></html>

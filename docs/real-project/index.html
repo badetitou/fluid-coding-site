@@ -32,6 +32,19 @@ can name a provider id or a language, with an optional <code>-native</code>/<cod
 on disk: entities from TS/JS/Java/Pharo providers, cell assignments from real directories, changed
 files from <code>git status --porcelain</code>, tags from <code>.fluid/tags/*.json</code> and tasks from
 <code>.claude/issues/*.md</code>. <code>warnings</code> in the response explains anything skipped.</p>
+<h3 id="connect-github-or-gitlab-issues">Connect GitHub or GitLab issues</h3>
+<p>Add <code>github</code> or <code>gitlab</code> to <code>settings.taskProviders</code>. The app embeds the public client ids of its
+GitHub and GitLab OAuth applications, so no environment variable is needed: start the server
+normally and use the sign-in buttons.</p>
+<p>Environment variables are only overrides, for a private OAuth application or a self-managed GitLab
+instance (17.9+):</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#E1E4E8">FLUID_GITHUB_CLIENT_ID</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">...</span><span style="color:#B392F0"> cargo</span><span style="color:#9ECBFF"> run</span><span style="color:#79B8FF"> -p</span><span style="color:#9ECBFF"> fluid-server</span></span>
+<span class="line"><span style="color:#E1E4E8">FLUID_GITLAB_CLIENT_ID</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">...</span><span style="color:#E1E4E8"> FLUID_GITLAB_URL</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">https://gitlab.example.com</span><span style="color:#B392F0"> cargo</span><span style="color:#9ECBFF"> run</span><span style="color:#79B8FF"> -p</span><span style="color:#9ECBFF"> fluid-server</span></span></code></pre>
+<p>On the Tasks page, select <strong>Connect GitHub</strong>
+or <strong>Connect GitLab</strong>, open the verification URL and approve the displayed code. The server stores
+the resulting token outside the repository and loads up to 100 open issues from the active repo’s
+<code>origin</code>. Forge issues are read-only in the board; they can still generate a brief and start a local
+branch.</p>
 <h3 id="how-the-switch-works">How the switch works</h3>
 <p><code>ProjectRegistry::is_configured()</code> distinguishes a real manifest/index from the synthetic demo
 project. When it is true, <code>AppState</code> calls <code>fluid_index::load(registry.active())</code> and converts the
