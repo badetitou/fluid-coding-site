@@ -1,0 +1,100 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ADR-0016 — Connected forge accounts and read-only review access · fluid-coding</title><meta name="description" content="- Status: accepted"><meta property="og:title" content="ADR-0016 — Connected forge accounts and read-only review access · fluid-coding"><meta property="og:description" content="- Status: accepted"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> ADR-0016 — Connected forge accounts and read-only review access</nav><article class="prose"><h1 id="adr-0016--connected-forge-accounts-and-read-only-review-access">ADR-0016 — Connected forge accounts and read-only review access</h1>
+<ul>
+<li>Status: accepted</li>
+<li>Date: 2026-11-25</li>
+</ul>
+<h2 id="context">Context</h2>
+<p>fluid-coding needs to review <strong>existing</strong> GitHub PRs and GitLab MRs (cloud and self-hosted) from a
+user’s connected accounts. The first release only reads: list accounts, add/remove an account, list
+reviews, fetch one review. Posting comments, approving or merging is deliberately out of scope.</p>
+<p>The <code>fluid-core</code> crate must stay pure and <code>wasm32</code>-compatible: no reqwest, no filesystem, no
+environment access. HTTP adapters, credential storage and UI belong to upper layers. We want one
+typed seam, as with <code>AgentPort</code>, so adapters and the web layer cannot invent their own shapes.</p>
+<h2 id="decision">Decision</h2>
+<p>Add <code>ForgePort</code> in <code>fluid-core</code> with a <code>manifest()</code> and an object-safe boxed-future <code>fetch()</code>:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="rust"><code><span class="line"><span style="color:#F97583">pub</span><span style="color:#F97583"> trait</span><span style="color:#B392F0"> ForgePort</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Send</span><span style="color:#F97583"> +</span><span style="color:#B392F0"> Sync</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">    fn</span><span style="color:#B392F0"> manifest</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&amp;</span><span style="color:#79B8FF">self</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">-&gt;</span><span style="color:#B392F0"> PluginManifest</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">    fn</span><span style="color:#B392F0"> fetch</span><span style="color:#E1E4E8">&lt;'</span><span style="color:#B392F0">a</span><span style="color:#E1E4E8">&gt;(</span></span>
+<span class="line"><span style="color:#F97583">        &amp;</span><span style="color:#E1E4E8">'</span><span style="color:#B392F0">a</span><span style="color:#79B8FF"> self</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">        request</span><span style="color:#F97583">:</span><span style="color:#F97583"> &amp;</span><span style="color:#E1E4E8">'</span><span style="color:#B392F0">a</span><span style="color:#B392F0"> ForgeRequest</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">    ) </span><span style="color:#F97583">-&gt;</span><span style="color:#B392F0"> Pin</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">Box</span><span style="color:#E1E4E8">&lt;</span><span style="color:#F97583">dyn</span><span style="color:#B392F0"> Future</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">Output</span><span style="color:#F97583"> =</span><span style="color:#B392F0"> Result</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">ForgeResponse</span><span style="color:#E1E4E8">, </span><span style="color:#B392F0">PluginError</span><span style="color:#E1E4E8">&gt;&gt; </span><span style="color:#F97583">+</span><span style="color:#B392F0"> Send</span><span style="color:#F97583"> +</span><span style="color:#E1E4E8"> '</span><span style="color:#B392F0">a</span><span style="color:#E1E4E8">&gt;&gt;;</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>There is no <code>async-trait</code> dependency. Failures are <code>PluginError</code>; the core never performs I/O.</p>
+<p><code>PluginKind::Forge</code>, <code>PluginPermission::ForgeRead</code> and <code>PluginPermission::ForgeWrite</code> are additive.
+The contract version stays at 1. <code>forge_manifest(kind)</code> declares id <code>forge:github</code> / <code>forge:gitlab</code>,
+label <code>GitHub</code> / <code>GitLab</code>, version <code>0.1.0</code>, <code>PluginKind::Forge</code>, <code>PluginRuntime::Native</code>,
+<code>PluginHost::Server</code>, capabilities <code>["reviews:read"]</code> and permissions <code>["network:out", "forge:read"]</code>. <code>forge_write_manifest(kind)</code> is a <strong>declared-only</strong> variant
+(<code>forge:github:write</code> / <code>forge:gitlab:write</code>) with <code>forge:write</code>; no adapter implements it yet.</p>
+<h3 id="account-model-and-authentication">Account model and authentication</h3>
+<p><code>ForgeAccount { id, kind, label, baseUrl?, username, authMethod, scopes }</code> is a public, loggable
+value. <strong>It MUST NOT contain a token.</strong> Secrets live in the server-side secret store; neither this
+type nor any <code>ForgeResponse</code> ever carries them. <code>ForgeAccountInput</code> is the only token-bearing type:
+it exists on add-account requests, implements <code>Debug</code> manually as <code>token: "***"</code>, and never derives
+<code>Serialize</code> as a type-level guarantee — its hand-written <code>Serialize</code> is what emits the request wire
+shape. <code>validate_account_input</code> rejects blank labels/usernames, PATs shorter than 8 characters and
+invalid base URLs; errors never echo the token.</p>
+<p>Auth is <strong>PAT-first</strong>: <code>ForgeAuthMethod::Pat</code> (<code>"pat"</code>) is the only implemented method.
+<code>ForgeAuthMethod::OAuthDevice</code> (<code>"oauth_device"</code>) is declared for the future device-flow work;
+adapters must reject it until that flow exists. <code>baseUrl</code> is optional: plain <code>github.com</code> and
+<code>gitlab.com</code> use the adapter default. Self-hosted GitLab sets <code>https://gitlab.example.com</code>. Only
+<code>https</code> is accepted, except <code>http://localhost</code> / <code>http://127.0.0.1</code> for local test setups. A GitHub
+<code>baseUrl</code> must name a GitHub Enterprise host — <code>https://github.com</code> (and its subdomains) is
+rejected instead of silently overriding the default.</p>
+<p>Token storage: the server keeps tokens in its secret store, never in the repo, project manifest,
+logs, Change Briefs or the browser. For this prerelease that store is a file outside the repository
+with mode <code>0600</code>; an OS-keychain backend is the follow-up. Removing an account deletes the stored
+secret as well as the public account record.</p>
+<h3 id="wire-contract">Wire contract</h3>
+<p><code>ForgeRequest</code> and <code>ForgeResponse</code> use an internally tagged <code>kind</code> field, camelCase names and
+snake_case enum values. Both Rust enums keep their newtype variants; a private wire enum carries the
+serde tag (serde cannot internally tag a newtype holding a <code>Vec</code>, and <code>AddAccount</code> would collide with
+the input’s own <code>kind</code> field if it were flattened). The exact JSON is:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="jsonc"><code><span class="line"><span style="color:#6A737D">// requests</span></span>
+<span class="line"><span style="color:#E1E4E8">{ </span><span style="color:#79B8FF">"kind"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"listAccounts"</span><span style="color:#E1E4E8"> }</span></span>
+<span class="line"><span style="color:#E1E4E8">{ </span><span style="color:#79B8FF">"kind"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"addAccount"</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">"input"</span><span style="color:#E1E4E8">: { </span><span style="color:#79B8FF">"kind"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"gitlab"</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">"label"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"GitLab"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">  "baseUrl"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"https://gitlab.example.com"</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">"username"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"alice"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">  "token"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"glpat-…"</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">"scopes"</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">"api"</span><span style="color:#E1E4E8">] } }</span></span>
+<span class="line"><span style="color:#E1E4E8">{ </span><span style="color:#79B8FF">"kind"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"removeAccount"</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">"id"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"acct-gl"</span><span style="color:#E1E4E8"> }</span></span>
+<span class="line"><span style="color:#E1E4E8">{ </span><span style="color:#79B8FF">"kind"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"listReviews"</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">"accountId"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"acct-gh"</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">"state"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"open"</span><span style="color:#E1E4E8"> }  </span><span style="color:#6A737D">// state optional</span></span>
+<span class="line"><span style="color:#E1E4E8">{ </span><span style="color:#79B8FF">"kind"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"getReview"</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">"accountId"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"acct-gh"</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">"id"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"github:badetitou/fluid#8"</span><span style="color:#E1E4E8"> }</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">// responses</span></span>
+<span class="line"><span style="color:#E1E4E8">{ </span><span style="color:#79B8FF">"kind"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"accounts"</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">"accounts"</span><span style="color:#E1E4E8">: [</span><span style="color:#FDAEB7;font-style:italic">ForgeAccount</span><span style="color:#E1E4E8">] }</span></span>
+<span class="line"><span style="color:#E1E4E8">{ </span><span style="color:#79B8FF">"kind"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"account"</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">"account"</span><span style="color:#E1E4E8">: </span><span style="color:#FDAEB7;font-style:italic">ForgeAccount</span><span style="color:#E1E4E8"> }</span></span>
+<span class="line"><span style="color:#E1E4E8">{ </span><span style="color:#79B8FF">"kind"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"removed"</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">"id"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"acct-gl"</span><span style="color:#E1E4E8"> }</span></span>
+<span class="line"><span style="color:#E1E4E8">{ </span><span style="color:#79B8FF">"kind"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"reviews"</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">"reviews"</span><span style="color:#E1E4E8">: [</span><span style="color:#FDAEB7;font-style:italic">ForgeReviewSummary</span><span style="color:#E1E4E8">] }</span></span>
+<span class="line"><span style="color:#E1E4E8">{ </span><span style="color:#79B8FF">"kind"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"review"</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">"review"</span><span style="color:#E1E4E8">: </span><span style="color:#FDAEB7;font-style:italic">ForgeReviewDetail</span><span style="color:#E1E4E8"> }</span></span></code></pre>
+<p><code>ForgeAccount.baseUrl</code>, <code>ForgeFileChange.patch</code> and <code>ForgeCheck.url</code> are omitted when absent.
+Enum values: kinds <code>github</code> / <code>gitlab</code>; auth <code>pat</code> / <code>oauth_device</code>; review states <code>open</code> /
+<code>merged</code> / <code>closed</code>; file statuses <code>added</code> / <code>modified</code> / <code>removed</code> / <code>renamed</code>; check statuses
+<code>passed</code> / <code>failed</code> / <code>pending</code> / <code>unknown</code>. Review ids are canonical and globally unique:
+<code>github:owner/repo#8</code>, <code>gitlab:group/proj!12</code> (<code>review_id(kind, project, number)</code>).</p>
+<p><code>packages/contracts/src/forge.ts</code> mirrors every wire type with zod. Account <strong>response</strong> schemas
+additionally reject any object containing a <code>token</code> field, even though zod would otherwise strip
+unknown keys: defence in depth against an adapter accidentally returning a secret. The shared
+fixture lives in <code>fixtures/contracts/forge.json</code>.</p>
+<h3 id="why-change-briefs-not-a-second-review-model">Why Change Briefs, not a second review model</h3>
+<p><code>to_change_brief(&amp;ForgeReviewDetail) -&gt; serde_json::Value</code> maps a review onto the <strong>existing</strong>
+<code>ChangeBrief</code> vocabulary in <code>crate::change</code>: <code>version</code>, <code>id</code>, <code>base</code>, <code>head</code>, <code>createdAt</code>, <code>files</code>
+(<code>path</code>, <code>status</code>, <code>additions</code>, <code>deletions</code>, <code>binary</code>), empty <code>symbols</code> / <code>cells</code> / <code>tags</code>, <code>checks</code>
+(<code>id</code>, <code>label</code>, <code>status</code>, <code>evidence</code>) and a transparent <code>risk</code>. Forge <code>removed</code> becomes brief
+<code>deleted</code>; check statuses become <code>pass</code> / <code>fail</code> / <code>warn</code> / <code>skip</code>; a check URL becomes evidence.
+Paths stay symbol-less because forge APIs do not provide the graph’s symbol keys, and no fabricated
+symbols are allowed. The review body, commit messages and author opinions are <strong>not</strong> evidence and
+are not mapped. Commits remain available on <code>ForgeReviewDetail</code> for a future UI, but the shared
+reasoning model stays one vocabulary: one brief per review, consumed by the same impact/risk/
+narrative pipeline as local changes. A separate review model would fork that pipeline and create a
+second notion of “what changed”.</p>
+<h2 id="consequences">Consequences</h2>
+<ul>
+<li>Backend and frontend adapters can be built against stable, typed contracts without touching the core.</li>
+<li>Review reads work offline-testably with fake <code>ForgePort</code> implementations; no network in core tests.</li>
+<li>Only <code>forge:read</code> is implemented. Comments and approvals need the separate <code>forge:write</code>
+capability, an explicit user opt-in and their own tests.</li>
+<li>Adding a forge (or a device-flow auth method) is a new adapter plus manifest, not a route or UI
+special case.</li>
+<li>The zod <code>pluginKindSchema</code> / <code>pluginPermissionSchema</code> lists in <code>agents.ts</code> must include <code>forge</code>,
+<code>forge:read</code> and <code>forge:write</code> for generic manifest validation; <code>forge.ts</code> provides
+<code>forgeManifestSchema</code> in the meantime.</li>
+</ul>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/decisions/ADR-0016-forge-accounts-and-review.md">docs/decisions/ADR-0016-forge-accounts-and-review.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — a local workbench for reviewing agent-written code.</span><nav class="footer-links" aria-label="Footer navigation"><a class="footer-docs" href="/fluid-coding-site/docs/">Documentation</a><a href="https://github.com/badetitou/fluid-coding">GitHub ↗</a></nav></div></footer></body></html>

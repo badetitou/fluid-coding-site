@@ -84,6 +84,33 @@ is validated before it becomes a <code>PatchProposal</code> or <code>NarrativeRe
 <p>Add the plugin to a collection manifest. Built-ins and third-party plugins use the same registration
 path. The registry shows id, kind, runtime, capabilities and permissions; the UI renders only slots it
 is allowed to render.</p>
+<h2 id="built-in-static-language-providers">Built-in static language providers</h2>
+<p>TypeScript, JavaScript, Java, Pharo (Tonel) and Rust ship as static built-ins. They are ordinary
+<code>LanguagePlugin</code> implementations composed in <code>builtin_language_plugins()</code>; no registration, network
+or toolchain is needed. Language ids, extensions and project markers come from <code>badetitou/model</code>
+(<code>model-detect</code>) so fluid does not keep a second language table. <code>classify()</code> maps extensions to the
+model id, and the indexer feeds the provider the source text it reads from disk. fluid remains the
+shared UI and contract layer; it does not own language semantics.</p>
+<h3 id="rust-rust-static">Rust (<code>rust-static</code>)</h3>
+<p>The Rust provider is a conservative line scanner, not a compiler. It extracts:</p>
+<ul>
+<li><code>struct</code>, <code>enum</code> and <code>union</code> as <code>class</code> entities, and <code>trait</code> as an <code>interface</code> entity;</li>
+<li>free and associated functions (<code>fn</code>, <code>pub fn</code>, <code>async fn</code>, <code>pub(crate) fn</code>) as <code>method</code> entities;</li>
+<li><code>mod</code> declarations as <code>namespace</code> entities, including nested modules;</li>
+<li><code>impl Type</code> and <code>impl Trait for Type</code> blocks: methods get the implementation type as their
+parent key, and an <code>implements</code> relation points from the type to the trait;</li>
+<li><code>calls</code> relations between recognised functions and methods.</li>
+</ul>
+<p>Keys follow the existing conventions: <code>path#Name</code> for top-level symbols,
+<code>path#Module#Name</code> for nested symbols and <code>path#Type#method</code> for associated functions. This keeps
+impact analysis stable across builds.</p>
+<p>The built-in Rust provider is a deterministic fallback for offline setup. Full SCIP-backed Rust
+semantics live in <code>model-lang-rust</code> and will arrive through a typed adapter; adding it as a hard
+dependency here would require a rust-analyzer SCIP index and break offline setup.</p>
+<p>Limits: there is no rust-analyzer semantics, no macro expansion, no trait resolution across crates,
+no generics-aware inference and no type checking. Commented-out code, string literals, <code>use</code> lines
+and macro invocations never produce symbols. An unresolved trait or type becomes a deterministic
+key in the current module rather than a guessed external entity.</p>
 <h2 id="checklist">Checklist</h2>
 <ul class="contains-task-list">
 <li class="task-list-item"><input type="checkbox" disabled> Manifest is versioned and validated.</li>

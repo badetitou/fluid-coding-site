@@ -1,0 +1,79 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Reviewing GitHub PRs and GitLab MRs · fluid-coding</title><meta name="description" content="fluid-coding reviews existing pull requests (GitHub) and merge requests (GitLab) from connected"><meta property="og:title" content="Reviewing GitHub PRs and GitLab MRs · fluid-coding"><meta property="og:description" content="fluid-coding reviews existing pull requests (GitHub) and merge requests (GitLab) from connected"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> Reviewing GitHub PRs and GitLab MRs</nav><article class="prose"><h1 id="reviewing-github-prs-and-gitlab-mrs">Reviewing GitHub PRs and GitLab MRs</h1>
+<p>fluid-coding reviews <strong>existing</strong> pull requests (GitHub) and merge requests (GitLab) from connected
+accounts. Reviews are read-only: the app fetches review facts and maps them to a Change Brief, then
+runs the usual impact, risk and narrative pipeline. It never posts comments or approves anything.</p>
+<p>See <a href="/fluid-coding-site/docs/decisions/ADR-0016-forge-accounts-and-review/">ADR-0016</a> for the contract and security model.</p>
+<h2 id="set-up-an-account">Set up an account</h2>
+<ol>
+<li>Create a personal access token with read access to code and pull/merge requests:
+<ul>
+<li>GitHub: <code>repo</code> (or the equivalent fine-grained read permission).</li>
+<li>GitLab: <code>api</code> / <code>read_api</code> plus read access to the project.</li>
+</ul>
+</li>
+<li>In Settings → Forge accounts, choose <strong>GitHub</strong> or <strong>GitLab</strong>, enter a label (for example
+<code>Work GitHub</code>), your username and the token.</li>
+<li>For self-hosted GitLab, set the base URL to the instance root, e.g.
+<code>https://gitlab.example.com</code>. Leave it empty for <code>gitlab.com</code>.</li>
+<li>For GitHub Enterprise, set the instance host, e.g. <code>https://ghe.example.com</code>. Do <strong>not</strong> set
+<code>https://github.com</code>: the public service uses the built-in default.</li>
+<li>Apply. The account is stored as a public record plus a server-side secret; the token is never
+shown again and never sent to the browser. Removing the account also deletes its stored secret.</li>
+</ol>
+<p>Only HTTPS base URLs are accepted, with one exception: <code>http://localhost</code> and <code>http://127.0.0.1</code>
+are allowed for local test instances (any port).</p>
+<h2 id="review-a-pr-or-mr">Review a PR or MR</h2>
+<ol>
+<li>Open the review list and pick an account. Optionally filter by state: <code>open</code>, <code>merged</code>, <code>closed</code>.</li>
+<li>Select a review. Its id is canonical: <code>github:owner/repo#8</code> or <code>gitlab:group/proj!12</code>.</li>
+<li>The detail view shows the title, author, source/target branches, files with additions and
+deletions, commits and CI checks.</li>
+<li>“Map to Change Brief” turns the review into the same fact shape used for local changes. Files
+keep their paths and add/delete counts, and check URLs become evidence for the check results.
+The review body and commit messages are context, not evidence.</li>
+</ol>
+<p>The token stays on the server: the UI only ever receives <code>ForgeAccount</code> records (no token field),
+and the contract schemas reject any account response that contains one.</p>
+<h2 id="limits">Limits</h2>
+<ul>
+<li>PATs only. Device-code OAuth (<code>oauth_device</code>) is declared in the contract but not implemented.</li>
+<li>Read-only. <code>forge:write</code> is a declared future capability for comments and approvals; nothing can
+post to a forge yet.</li>
+<li>GitHub and GitLab only; other forges need a new manifest and adapter.</li>
+<li>Reviews are mapped to Change Brief facts, not to a separate review model. Forge APIs do not give
+symbol keys, so <code>symbols</code>, <code>cells</code> and <code>tags</code> in the mapped brief are empty; no symbols are guessed.</li>
+<li>File patches are carried on <code>ForgeReviewDetail</code> but are not used as symbol evidence.</li>
+<li>No polling or webhook ingestion in this release: refresh the list to see new reviews.</li>
+<li>Empty labels/usernames and PATs shorter than 8 characters are rejected before an account is saved.</li>
+</ul>
+<h2 id="server-adapter">Server adapter</h2>
+<p>The server implements <code>fluid_core::plugins::forge::ForgePort</code> in <code>crates/fluid-server/src/forge</code>.
+<code>POST /api/forge</code> accepts the tagged <code>ForgeRequest</code> shapes from ADR-0016 and returns the tagged
+<code>ForgeResponse</code> shapes; request fields and input are validated again on the server. Invalid input,
+invalid ids and unreachable upstream APIs produce 4xx responses with fixed messages. No error or
+response body ever contains a token.</p>
+<p>Accounts and tokens live under the forge folder of <code>FLUID_CODING_HOME</code>, or
+<code>&lt;workspace&gt;/.fluid-home/forge</code> when that variable is unset — never inside a project repository or
+<code>.fluid/</code>. Metadata is an atomically replaced <code>accounts.json</code>; each token is a separate file created
+with mode <code>0600</code> on Unix (and a <code>0700</code> directory). Removing an account deletes its token file. The
+read path only ever returns <code>ForgeAccount</code> records without a token field, and a <code>Debug</code> impl redacts
+tokens. <code>oauth_device</code> is rejected at the HTTP boundary and in the service; only PATs are stored.</p>
+<p>GitHub uses <code>api.github.com</code>, or <code>&lt;baseUrl&gt;/api/v3</code> for a GitHub Enterprise instance; GitLab uses
+<code>gitlab.com/api/v4</code>, or <code>&lt;baseUrl&gt;/api/v4</code> for self-hosted instances. An explicit <code>/api/v3</code> or
+<code>/api/v4</code> in <code>baseUrl</code> is used verbatim. Reviews are discovered from the account’s repositories or
+projects, then read from PR/MR list and detail endpoints. Canonical ids are parsed back into the API
+project and number for detail requests. Checks come from GitHub check runs (falling back to commit
+statuses) and GitLab MR statuses; when neither is available the adapter reports one <code>unknown</code> check
+rather than inventing a result. GitLab diffs contribute added/deleted line counts.</p>
+<p>All adapter and route tests are offline and deterministic: a std-only <code>TcpListener</code> mock serves
+canned GitHub/GitLab JSON fixtures, and account tests use a temporary home. The mock also records
+request paths and <code>Authorization</code> headers to assert that the token appears only as
+<code>Bearer &lt;token&gt;</code> and never in a URL.</p>
+<h2 id="remaining-adapter-limits">Remaining adapter limits</h2>
+<ul>
+<li>Repository/project discovery is capped at the first API page (100 entries) per account.</li>
+<li>GitLab diffs provide line counts, not GitHub-style per-file additions from the API payload.</li>
+<li>No polling, webhook ingestion or write endpoints. <code>forge:write</code> remains declared-only.</li>
+<li>Check APIs are optional: an unavailable check API is reported as <code>unknown</code>, not as a pass.</li>
+</ul>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/forge-reviews.md">docs/forge-reviews.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — a local workbench for reviewing agent-written code.</span><nav class="footer-links" aria-label="Footer navigation"><a class="footer-docs" href="/fluid-coding-site/docs/">Documentation</a><a href="https://github.com/badetitou/fluid-coding">GitHub ↗</a></nav></div></footer></body></html>

@@ -1,12 +1,31 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>First-run setup · fluid-coding</title><meta name="description" content="A fresh app opens on /setup instead of the map. Setup has two front doors that produce the same"><meta property="og:title" content="First-run setup · fluid-coding"><meta property="og:description" content="A fresh app opens on /setup instead of the map. Setup has two front doors that produce the same"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> First-run setup</nav><article class="prose"><h1 id="first-run-setup">First-run setup</h1>
-<p>A fresh app opens on <code>/setup</code> instead of the map. Setup has two front doors that produce the same
-reviewable proposal:</p>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>First-run setup · fluid-coding</title><meta name="description" content="A fresh app opens on /setup, a dedicated Connect this project screen for the real local"><meta property="og:title" content="First-run setup · fluid-coding"><meta property="og:description" content="A fresh app opens on /setup, a dedicated Connect this project screen for the real local"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> First-run setup</nav><article class="prose"><h1 id="first-run-setup">First-run setup</h1>
+<p>A fresh app opens on <code>/setup</code>, a dedicated <strong>Connect this project</strong> screen for the real local
+workspace the app was launched against — not a generic navigation tab. Two refine modes produce the
+same reviewable proposal:</p>
 <ul>
-<li><strong>Guided</strong> — name, root path, repository rows, language checkboxes, plugin checkboxes and trust mode.</li>
-<li><strong>Chat</strong> — “I want to work on fluid at ~/dev/fluid”. An LLM may help parse the sentence, but the
-deterministic filesystem scan is the source of truth.</li>
+<li><strong>Guided form</strong> — checkboxes and dropdowns, seeded from detection: name, root path, repository
+rows, languages, plugins and trust mode.</li>
+<li><strong>Chat</strong> — “Refine this project: add the API repo”. The sentence only refines wording and choices.</li>
 </ul>
+<p>The deterministic filesystem scan is the source of truth for paths, repositories and languages. An
+LLM may suggest a project name or plugin reasons, but it never supplies a path and never overrides a
+filesystem fact.</p>
 <p>See <a href="/fluid-coding-site/docs/decisions/ADR-0015-first-run-project-setup/">ADR-0015</a>.</p>
+<h2 id="workspace-detection-order">Workspace detection order</h2>
+<p><code>GET /api/setup/status</code> reports <code>detectedWorkspace</code>:</p>
+<ol>
+<li>Canonicalize the launch directory: <code>FLUID_WORKSPACE</code> when set, otherwise the process current
+directory.</li>
+<li>Check that directory, then at most ten parents. Prefer the nearest <code>.fluid-coding/project.json</code>
+(a real file), then a <code>.git</code> entry (directory or file); ties go to the manifest.</li>
+<li>If nothing meaningful exists, fall back to the canonicalized launch directory itself.</li>
+<li>Run the bounded deterministic scan on the chosen root. Repositories are relative checkout paths;
+<code>.</code> means the root is a checkout. Symlinked subdirectories are never followed out of the root.</li>
+</ol>
+<p><code>source</code> is <code>env</code>, <code>currentDir</code>, <code>gitRoot</code> or <code>manifest</code>; <code>gitRoot</code> and <code>configured</code> record which
+markers were found. When detection is unavailable, the form keeps manual path entry as a fallback.</p>
+<p>Detection seeds the guided state once, when status arrives. Later status fetches and explicit user
+edits never overwrite what the user has already changed.</p>
 <h2 id="what-setup-does">What setup does</h2>
 <ol>
 <li>Reads the local project index (<code>~/.fluid-coding/projects.json</code>) and the plugin registry.</li>
@@ -19,11 +38,13 @@ opens the map.</li>
 <h2 id="safety">Safety</h2>
 <ul>
 <li>Nothing is written before Apply. The default trust mode is <code>propose</code>.</li>
-<li>Paths from chat are untrusted text: they must resolve to an existing directory.</li>
+<li>Paths from a detected project come from the filesystem; path-looking chat text is dropped before
+proposal so it cannot replace the detected root.</li>
 <li>Plugin ids are checked against the registry; hallucinated ids are dropped with a warning.</li>
 <li><code>network:out</code> and <code>process:spawn</code> permissions require a separate checkbox.</li>
 <li>If the LLM is unavailable or returns invalid JSON, setup still works offline.</li>
 </ul>
-<p>Setup can be reopened from Settings at any time. Adding a repository later is the same flow: edit
-the project definition or rerun setup and merge the proposal.</p>
+<p>Reconfigure this project lives under Settings as a secondary action (also available as a quiet shell
+footer link), not in primary navigation. Adding a repository later is the same flow: edit the
+project definition or rerun setup and merge the proposal.</p>
 </article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/setup.md">docs/setup.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — a local workbench for reviewing agent-written code.</span><nav class="footer-links" aria-label="Footer navigation"><a class="footer-docs" href="/fluid-coding-site/docs/">Documentation</a><a href="https://github.com/badetitou/fluid-coding">GitHub ↗</a></nav></div></footer></body></html>

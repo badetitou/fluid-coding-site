@@ -1,0 +1,122 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Settings: General vs Project · fluid-coding</title><meta name="description" content="Settings are split by scope. The split is deliberate: an LLM choice is a property of the machine,"><meta property="og:title" content="Settings: General vs Project · fluid-coding"><meta property="og:description" content="Settings are split by scope. The split is deliberate: an LLM choice is a property of the machine,"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> Settings: General vs Project</nav><article class="prose"><h1 id="settings-general-vs-project">Settings: General vs Project</h1>
+<p>Settings are split by scope. The split is deliberate: an LLM choice is a property of the machine,
+while repos, trust and plugins are properties of a local checkout.</p>
+<h2 id="general-settings-machine-level">General settings (machine-level)</h2>
+<p>The <strong>General</strong> tab manages the LLM providers available on this machine:</p>
+<table>
+<thead>
+<tr>
+<th>id</th>
+<th>label</th>
+<th>default command</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>opencode</code></td>
+<td>opencode</td>
+<td><code>opencode</code></td>
+</tr>
+<tr>
+<td><code>codex</code></td>
+<td>Codex</td>
+<td><code>codex</code></td>
+</tr>
+<tr>
+<td><code>claude</code></td>
+<td>Claude</td>
+<td><code>claude</code></td>
+</tr>
+<tr>
+<td><code>copilot</code></td>
+<td>Copilot</td>
+<td><code>copilot</code></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>Autodetection</strong> is a deterministic <code>PATH</code> lookup of the first token of the effective command.
+It does not spawn a process, run a shell or call the network. A path is reported only when it is
+a file with an executable bit (on Unix); directories and non-executable files are ignored.</li>
+<li><strong>Overrides</strong> replace the default command for one provider. Commands are plain argv tokens:
+blank values and shell metacharacters (<code>; &amp; | $ \</code> newlines quotes <code>&lt; &gt;</code>) are rejected.</li>
+<li><strong>Selection</strong> chooses the provider whose effective command is shown; with no selection the
+effective command is the documented default <code>claude -p</code>.</li>
+<li><strong>Storage</strong>: <code>&lt;home&gt;/general-settings.json</code>, version <code>1</code>, with <code>selected</code> and <code>commands</code>.
+<code>&lt;home&gt;</code> is <code>FLUID_CODING_HOME</code>, otherwise <code>&lt;FLUID_WORKSPACE&gt;/.fluid-home</code>, otherwise
+<code>./.fluid-home</code>. A missing or invalid file falls back to defaults; writes are atomic
+(temp file + rename) and contain no secrets.</li>
+<li>Endpoints: <code>GET /api/settings/general</code> and <code>PATCH /api/settings/general</code>. Nothing is written
+until the user presses <strong>Save general settings</strong>.</li>
+</ul>
+<p>Selecting a provider or changing a command never changes deterministic facts, never re-indexes a
+repo and never writes to the repository.</p>
+<h2 id="themes">Themes</h2>
+<p>General settings also choose the interface theme. Six built-in themes are available:</p>
+<table>
+<thead>
+<tr>
+<th>id</th>
+<th>mode</th>
+<th>source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>fluid-dark</code></td>
+<td>dark</td>
+<td>fluid-coding’s original workbench palette</td>
+</tr>
+<tr>
+<td><code>badetitou-light</code></td>
+<td>light</td>
+<td>fluid’s <code>badetitou</code> design tokens</td>
+</tr>
+<tr>
+<td><code>badetitou-dark</code></td>
+<td>dark</td>
+<td>fluid’s <code>badetitou</code> design tokens</td>
+</tr>
+<tr>
+<td><code>solarized-light</code></td>
+<td>light</td>
+<td>fluid’s Solarized theme</td>
+</tr>
+<tr>
+<td><code>solarized-dark</code></td>
+<td>dark</td>
+<td>fluid’s Solarized theme</td>
+</tr>
+<tr>
+<td><code>high-contrast</code></td>
+<td>dark/light</td>
+<td>fluid’s high-contrast theme, following the OS preference</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Theme tokens are ported from <code>badetitou/model</code>’s companion design system in <code>fluid</code>; the CSS
+variables in <code>styles.css</code> are remapped through <code>data-theme</code> on <code>&lt;html&gt;</code>.</li>
+<li>The choice is stored in <code>general-settings.json</code> as <code>theme</code> and applied when you save. No
+repository file is touched.</li>
+</ul>
+<h2 id="project-settings-local-checkout">Project settings (local checkout)</h2>
+<p>The <strong>Project</strong> tab is a read-only view of the currently active project declared in
+<code>.fluid-coding/project.json</code> in the project root:</p>
+<ul>
+<li>identity (<code>id</code>, <code>name</code>, <code>root</code>);</li>
+<li>repositories (<code>key</code>, relative <code>path</code>, <code>languages</code>);</li>
+<li>default trust (<code>propose</code>, <code>edit</code> or <code>auto</code>);</li>
+<li>enabled plugins and task providers;</li>
+<li>data source (<code>real</code> for an indexed project, <code>demo</code> before setup);</li>
+<li>warnings produced while loading the workspace.</li>
+</ul>
+<p>When no project is configured, the tab says so honestly: it shows the workspace root and data
+source rather than inventing a project. To create or change the declaration, use the quiet
+<strong>Reconfigure this project</strong> link, which opens <code>/setup</code>. Setup is the only place that applies a
+project proposal to the filesystem. The read endpoint is <code>GET /api/settings/project</code>.</p>
+<h2 id="what-is-not-here">What is not here</h2>
+<p>Language providers, forge accounts and performance budgets belong to their own surfaces. General
+settings contain only LLM provider management and themes; project settings do not contain
+machine-level secrets or overrides.</p>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/settings.md">docs/settings.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — a local workbench for reviewing agent-written code.</span><nav class="footer-links" aria-label="Footer navigation"><a class="footer-docs" href="/fluid-coding-site/docs/">Documentation</a><a href="https://github.com/badetitou/fluid-coding">GitHub ↗</a></nav></div></footer></body></html>
