@@ -1,0 +1,245 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>M0/POC — See, task, edit, review · fluid-coding</title><meta name="description" content="Status: proposed, 2026-11-25. Scope superseded by ADR-0012:"><meta property="og:title" content="M0/POC — See, task, edit, review · fluid-coding"><meta property="og:description" content="Status: proposed, 2026-11-25. Scope superseded by ADR-0012:"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.D9k93Xz8.css"></head><body><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Home</a><a class="nav-link" href="/fluid-coding-site/demo/">Demo</a><a class="nav-link active" href="/fluid-coding-site/docs/">Docs</a><a class="nav-link" href="https://github.com/badetitou/fluid-coding">GitHub</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> M0/POC — See, task, edit, review</nav><article class="prose"><h1 id="m0poc--see-task-edit-review">M0/POC — See, task, edit, review</h1>
+<p>Status: proposed, 2026-11-25. Scope superseded by <a href="../../decisions/ADR-0012-poc-scope/">ADR-0012</a>:
+the first POC is the installed, dogfoodable loop, not a read-only viewer.</p>
+<h2 id="goal">Goal</h2>
+<p>Install fluid-coding locally, open a repository, pick a task, understand its structure, hand it to a
+real agent, review a patch with evidence, apply it with a checkpoint, and continue in the same shell.
+Every fact comes from Rust; the web shell renders and filters. The same facts are available to external
+agents through MCP read tools. LLM narrative is present as a plugin but is never evidence.</p>
+<h2 id="demo-script">Demo script</h2>
+<ol>
+<li><code>bash scripts/install-local.sh</code>; launch <code>~/Applications/fluid-coding.app</code>. The app serves the
+embedded web on loopback and opens the browser.</li>
+<li><code>Tasks</code> shows local Markdown issues plus normalized GitHub/GitLab snapshots; select one and copy its
+brief to the agent dock.</li>
+<li>The map shows layer × domain cells; select <code>business:codegraph</code>; the URL carries the selection.</li>
+<li>Miller columns show symbols, then relations, with tag badges. Monaco opens the selected file with
+LSP-style navigation; “Open in VS Code” remains available.</li>
+<li>Ask opencode or Claude Code for the task. Its adapter returns messages and a patch proposal through
+<code>AgentPort</code>; the chat shows the Change Brief separately from optional LLM narrative.</li>
+<li>Review hunks, apply with explicit <code>edit</code> trust, and restore a checkpoint to prove undo.</li>
+<li>Changes shows changed and impacted cells, the diff and the deterministic brief.</li>
+<li>Tags: accept a proposal or propose a tag; a file is written under <code>.fluid/tags/</code>.</li>
+<li>From an external agent: <code>get_matrix</code>, <code>get_impact</code>, <code>get_diff</code>, <code>list_tags</code>, <code>list_tasks</code>,
+<code>get_task</code>, <code>task_brief</code> return the same contract-valid JSON.</li>
+</ol>
+<h2 id="acceptance-criteria">Acceptance criteria</h2>
+<ul class="contains-task-list">
+<li class="task-list-item"><input type="checkbox" disabled> Installed macOS app serves embedded web assets; binds only <code>127.0.0.1</code>; <code>--no-open</code>, <code>--port</code>
+and <code>--print-url</code> work.</li>
+<li class="task-list-item"><input type="checkbox" disabled> Rust server serves <code>/api/health</code>, <code>/api/matrix</code>, <code>/api/impact</code>, <code>/api/graph</code>,
+<code>/api/entity/{key}</code>, <code>/api/relations/{key}</code>, <code>/api/tags</code>, and the Tasks/Edit/Checkpoint/Agent/
+Narrative routes; the demo fixture loads.</li>
+<li class="task-list-item"><input type="checkbox" disabled> Cached matrix p95 &lt; 20 ms; impact p95 &lt; 100 ms at 100k LOC; cold start &lt; 150 ms.</li>
+<li class="task-list-item"><input type="checkbox" disabled> A working tree is <code>head: null</code>; impact distances match the reverse-edge BFS.</li>
+<li class="task-list-item"><input type="checkbox" disabled> Initial JS &lt; 150 KB gzip (<code>pnpm check:bundle</code>); Monaco is lazy and excluded from the initial
+bundle; FCP &lt; 300 ms local.</li>
+<li class="task-list-item"><input type="checkbox" disabled> The map draws 5,000 cells at 60 fps pan/zoom; only visible cells draw; lists over 100 rows virtualize.</li>
+<li class="task-list-item"><input type="checkbox" disabled> Selection lives in the URL; one request per selection, no N+1.</li>
+<li class="task-list-item"><input type="checkbox" disabled> Change Brief shows files, symbols, cells, checks and risk; LLM narrative is visually separated.</li>
+<li class="task-list-item"><input type="checkbox" disabled> A chat turn can propose a patch; apply creates a checkpoint with exact prior contents; restore
+returns the files to that state. <code>propose</code> is default and rejects direct writes.</li>
+<li class="task-list-item"><input type="checkbox" disabled> Fake, opencode and Claude Code adapters implement the same <code>AgentPort</code>; unknown adapters 404.</li>
+<li class="task-list-item"><input type="checkbox" disabled> TypeScript/JavaScript, Java and Pharo Tonel providers implement <code>LanguagePlugin</code>; live Pharo is
+a later adapter with the same trait.</li>
+<li class="task-list-item"><input type="checkbox" disabled> Tags: accept/propose writes <code>.fluid/tags/&lt;id&gt;.json</code>; orphan is computed at read time, never stored.</li>
+<li class="task-list-item"><input type="checkbox" disabled> MCP read tools return contract-valid JSON; <code>propose_tag</code> requires trust mode and is audited.</li>
+<li class="task-list-item"><input type="checkbox" disabled> Dogfood note in the PR: what was tried in the installed fluid-coding and what the map missed.</li>
+</ul>
+<h2 id="ordered-tasks">Ordered tasks</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Task</th>
+<th>Depends on</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Contracts: fixtures, zod boundaries, bundle gate</td>
+<td>—</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Rust core: fixtures, matrix/impact/tag/brief/tasks, plugin ports, wasm check</td>
+<td>1</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Rust server: cached endpoints, tasks, tags read/write</td>
+<td>2</td>
+</tr>
+<tr>
+<td>4</td>
+<td>MCP server: read tools + task reads; audit <code>propose_tag</code></td>
+<td>3</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Web shell: typed client, canvas map, Miller columns, URL selection</td>
+<td>1, 3</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Changes page: diff, impact overlay, deterministic brief + optional narrative</td>
+<td>3, 5</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Tags and Tasks pages: accept/propose, computed orphan, local board</td>
+<td>3, 5</td>
+</tr>
+<tr>
+<td>8</td>
+<td><code>fluid-cli</code>, embedded assets, logo, <code>.app</code> build and local install</td>
+<td>3, 5</td>
+</tr>
+<tr>
+<td>9</td>
+<td>Edit plugin: patch proposals, apply, checkpoints, restore</td>
+<td>2, 3</td>
+</tr>
+<tr>
+<td>10</td>
+<td>Agent plugins: fake, opencode, Claude Code behind <code>AgentPort</code></td>
+<td>2, 3</td>
+</tr>
+<tr>
+<td>11</td>
+<td>Monaco/LSP surface, chat dock and “Open in VS Code” action</td>
+<td>5, 9, 10</td>
+</tr>
+<tr>
+<td>12</td>
+<td>Language providers: TS/JS, Java, Pharo Tonel</td>
+<td>2</td>
+</tr>
+<tr>
+<td>13</td>
+<td>CI, budgets, end-to-end dogfood note, STATUS update</td>
+<td>4, 6, 7, 8, 11, 12</td>
+</tr>
+</tbody>
+</table>
+<p>Tasks 2–4, 9–10 and 12 are Rust/plugin tracks; 5–7 and 11 are web tracks. They meet at the shared
+fixtures and zod contracts, not ad-hoc JSON. Every slice must stay independently reviewable.</p>
+<h2 id="dependencies">Dependencies</h2>
+<ul>
+<li><strong>Rust core/server</strong>: <code>fluid-core</code> types, matrix, impact, tags, brief, tasks, plugin ports; axum
+endpoints; generation.</li>
+<li><strong>Web shell</strong>: routes, canvas map, Miller columns, Changes/Tasks pages, Monaco, agent dock; no graph
+logic in React.</li>
+<li><strong>MCP read tools</strong>: <code>get_matrix</code>, <code>cell_symbols</code>, <code>get_entity</code>, <code>get_relations</code>, <code>get_impact</code>,
+<code>get_diff</code>, <code>list_tags</code>, <code>list_tasks</code>, <code>get_task</code>, <code>task_brief</code>; writes behind trust mode.</li>
+<li><strong>Contracts</strong>: hand-mirrored zod schemas plus shared fixtures are the interim guard until
+<code>fluid-contracts-gen</code> exists.</li>
+</ul>
+<h2 id="out-of-scope-for-this-poc">Out of scope for this POC</h2>
+<ul>
+<li>Hosted multi-user collaboration, CRDT, auth.</li>
+<li>SQLite as source of truth; <code>.fluid/</code> files and <code>.claude/issues/</code> remain canonical.</li>
+<li>Live GitHub/GitLab write-back: tasks are normalized snapshots with capability manifests for now.</li>
+<li>Live Pharo via PLexus/MCP: static Tonel provider first, same trait later.</li>
+<li>Arbitrary plugin sandboxing beyond typed manifests and explicit trust modes.</li>
+</ul>
+<h2 id="risks">Risks</h2>
+<table>
+<thead>
+<tr>
+<th>Risk</th>
+<th>Impact</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>SymbolLinker</strong> cannot join Structure ids and Model SCIP keys reliably</td>
+<td>wrong cells, wrong impact</td>
+<td>spike on a real TS repo; SCIP first, <code>file + name + range</code> fallback; expose confidence; do not block POC on perfect links</td>
+</tr>
+<tr>
+<td><strong>Map at 5,000 cells</strong></td>
+<td>dropped frames, unusable home</td>
+<td>canvas, draw only visible cells, no React node per cell; aggregate at low zoom; Playwright rAF trace early</td>
+</tr>
+<tr>
+<td>Contract drift until codegen</td>
+<td>web compiles against stale shapes</td>
+<td>shared fixtures in both test suites; one-PR rule; add <code>fluid-contracts-gen</code> later</td>
+</tr>
+<tr>
+<td>Agent CLI output varies</td>
+<td>adapters break silently</td>
+<td>parse into zod/serde contracts, fake adapter in tests, typed <code>PluginError</code>, no shell strings</td>
+</tr>
+<tr>
+<td>LLM narrative looks authoritative</td>
+<td>bad trust decisions</td>
+<td>facts first, narrative separated and labelled, never used as evidence</td>
+</tr>
+<tr>
+<td>Patch application corrupts files</td>
+<td>loss of work</td>
+<td>pure hunk validation, checkpoint before write, traversal rejection, restore test</td>
+</tr>
+<tr>
+<td>Two toolchains</td>
+<td>CI blind spots</td>
+<td>CI runs Rust and web jobs; the wasm check catches I/O creep in core</td>
+</tr>
+</tbody>
+</table>
+<h2 id="faf-budgets">FAF budgets</h2>
+<p>Authoritative table: <a href="../../quality/performance/">docs/quality/performance.md</a>. POC gates:</p>
+<table>
+<thead>
+<tr>
+<th>Path</th>
+<th>Budget</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Cached matrix API p95</td>
+<td>&lt; 20 ms</td>
+</tr>
+<tr>
+<td>Impact, 100k LOC p95</td>
+<td>&lt; 100 ms</td>
+</tr>
+<tr>
+<td>Cold server start, small repo</td>
+<td>&lt; 150 ms</td>
+</tr>
+<tr>
+<td>First contentful paint, local</td>
+<td>&lt; 300 ms</td>
+</tr>
+<tr>
+<td>Initial JS, gzip</td>
+<td>&lt; 150 KB (<code>scripts/check-bundle.mjs</code>)</td>
+</tr>
+<tr>
+<td>Map at 5,000 cells</td>
+<td>60 fps pan/zoom</td>
+</tr>
+<tr>
+<td>Memory, 1M LOC</td>
+<td>&lt; 300 MB</td>
+</tr>
+<tr>
+<td>Idle CPU</td>
+<td>~0% (SSE only while a job runs)</td>
+</tr>
+</tbody>
+</table>
+<p>A regression blocks the release unless an ADR records the exception.</p>
+<h2 id="dogfood">Dogfood</h2>
+<p>Before closing the POC, run the <strong>installed app</strong> on fluid-coding itself: pick a real local task, open
+the matrix, ask an agent for a patch, review its brief, apply it, restore a checkpoint, and call the MCP
+read tools from an external agent. Record in the PR: the matrix and impact of the change, initial JS
+gzip, what the map made obvious, and what it missed. The dogfood note is part of done, not a demo
+afterthought.</p>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/plans/M0-see.md">docs/plans/M0-see.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — the understanding and review surface for agent-driven coding.</span><span>Local-first · Rust core · static site</span></div></footer></body></html>

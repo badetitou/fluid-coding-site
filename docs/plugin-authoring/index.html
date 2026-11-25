@@ -1,0 +1,96 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Adding a plugin · fluid-coding</title><meta name="description" content="fluid-coding is plugin-first. Every extension follows the same path: a versioned manifest, an"><meta property="og:title" content="Adding a plugin · fluid-coding"><meta property="og:description" content="fluid-coding is plugin-first. Every extension follows the same path: a versioned manifest, an"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.D9k93Xz8.css"></head><body><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Home</a><a class="nav-link" href="/fluid-coding-site/demo/">Demo</a><a class="nav-link active" href="/fluid-coding-site/docs/">Docs</a><a class="nav-link" href="https://github.com/badetitou/fluid-coding">GitHub</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> Adding a plugin</nav><article class="prose"><h1 id="adding-a-plugin">Adding a plugin</h1>
+<p>fluid-coding is plugin-first. Every extension follows the same path: a versioned manifest, an
+implementation for one runtime tier, an example, a contract test, documentation and registration in a
+plugin collection. Do not import a plugin implementation directly from a page or route.</p>
+<p>See <a href="../decisions/ADR-0008-plugin-kinds/">ADR-0008</a> for kinds and
+<a href="../decisions/ADR-0013-plugin-delivery-tiers/">ADR-0013</a> for runtime tiers.</p>
+<h2 id="1-choose-the-seam-and-the-tier">1. Choose the seam and the tier</h2>
+<table>
+<thead>
+<tr>
+<th>You want to…</th>
+<th>Kind</th>
+<th>Runtime</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>add a panel, badge, renderer or editor decoration</td>
+<td><code>editor</code></td>
+<td><code>web</code></td>
+</tr>
+<tr>
+<td>add a portable analyzer, check or formatter</td>
+<td><code>language</code></td>
+<td><code>wasm</code></td>
+</tr>
+<tr>
+<td>add a fast parser, indexer or graph provider</td>
+<td><code>language</code></td>
+<td><code>native</code></td>
+</tr>
+<tr>
+<td>add an agent or narrative provider</td>
+<td><code>agent</code> / <code>narrative</code></td>
+<td><code>native</code> (process adapter allowed)</td>
+</tr>
+</tbody>
+</table>
+<p>Rust is optional for a <code>web</code> plugin. Rust is the default for hot paths. WASM is the default for
+third-party compute. The native tier uses <code>runtime: "native"</code> for a linked crate and
+<code>runtime: "process"</code> for an external executable.</p>
+<h2 id="2-write-the-manifest">2. Write the manifest</h2>
+<p>The additive runtime fields are specified in ADR-0013; first-POC built-ins predate them and default to
+<code>native</code>.</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="json"><code><span class="line"><span style="color:#E1E4E8">{</span></span>
+<span class="line"><span style="color:#79B8FF">  "id"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"acme-task-badges"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">  "label"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"ACME task badges"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">  "kind"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"editor"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">  "runtime"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"web"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">  "host"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"web"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">  "version"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"0.1.0"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">  "contractVersion"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">  "entry"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"./dist/index.js"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">  "slots"</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">"task.card.badge"</span><span style="color:#E1E4E8">],</span></span>
+<span class="line"><span style="color:#79B8FF">  "capabilities"</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">"render"</span><span style="color:#E1E4E8">],</span></span>
+<span class="line"><span style="color:#79B8FF">  "permissions"</span><span style="color:#E1E4E8">: []</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>Permissions are explicit: <code>workspace:read</code>, <code>workspace:write</code>, <code>tasks:read</code>, <code>network:out</code>,
+<code>process:spawn</code>. A write plugin must return patch proposals; the host applies them under the current
+trust mode and always creates a checkpoint.</p>
+<h2 id="3-implement-the-tier">3. Implement the tier</h2>
+<h3 id="web">web</h3>
+<p>Export <code>mount(slot, host)</code> from the entry module. The host gives typed read APIs and <code>proposePatch</code>.
+A web plugin never calls <code>bffClient</code>, urql or a write store directly, and never hard-codes colours: it
+uses the host theme. Keep one component per file and ship CSS, not inline style piles.</p>
+<h3 id="wasm">wasm</h3>
+<p>Implement the core port in Rust, compile to <code>wasm32-unknown-unknown</code> and exchange validated JSON with
+the host. No filesystem, clock or network access inside the module. The same <code>fluid-core</code> crate already
+has a WASM facade to copy from.</p>
+<h3 id="native">native</h3>
+<p>Add a crate to the workspace, implement the same port and register it in the server composition root.
+Process adapters (opencode, Claude Code, LLM CLI) receive argv, never a shell string, and their output
+is validated before it becomes a <code>PatchProposal</code> or <code>NarrativeResponse</code>.</p>
+<h2 id="4-prove-it">4. Prove it</h2>
+<p>Every plugin ships with:</p>
+<ul>
+<li>an example fixture showing the manifest and expected output;</li>
+<li>a contract test against the zod/serde schema and a drift fixture;</li>
+<li>a failure test: a malformed plugin is rejected without taking down the host;</li>
+<li>a permission test for any requested side effect;</li>
+<li>a short <code>README.md</code> naming the port, slots, permissions and configuration.</li>
+</ul>
+<h2 id="5-register-it">5. Register it</h2>
+<p>Add the plugin to a collection manifest. Built-ins and third-party plugins use the same registration
+path. The registry shows id, kind, runtime, capabilities and permissions; the UI renders only slots it
+is allowed to render.</p>
+<h2 id="checklist">Checklist</h2>
+<ul class="contains-task-list">
+<li class="task-list-item"><input type="checkbox" disabled> Manifest is versioned and validated.</li>
+<li class="task-list-item"><input type="checkbox" disabled> Runtime tier is the smallest that works.</li>
+<li class="task-list-item"><input type="checkbox" disabled> Contract test and drift fixture pass.</li>
+<li class="task-list-item"><input type="checkbox" disabled> No direct network, filesystem or write-store access from <code>web</code>.</li>
+<li class="task-list-item"><input type="checkbox" disabled> Writes go through patch proposals, trust mode and checkpoints.</li>
+<li class="task-list-item"><input type="checkbox" disabled> Docs, example and registration are in the same commit.</li>
+</ul>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/plugin-authoring.md">docs/plugin-authoring.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — the understanding and review surface for agent-driven coding.</span><span>Local-first · Rust core · static site</span></div></footer></body></html>

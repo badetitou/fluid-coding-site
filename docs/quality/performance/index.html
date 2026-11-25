@@ -1,0 +1,77 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Performance budgets — FAF · fluid-coding</title><meta name="description" content="Fast as Fuck is a product requirement. These budgets are release gates. Measure before optimizing;"><meta property="og:title" content="Performance budgets — FAF · fluid-coding"><meta property="og:description" content="Fast as Fuck is a product requirement. These budgets are release gates. Measure before optimizing;"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.D9k93Xz8.css"></head><body><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Home</a><a class="nav-link" href="/fluid-coding-site/demo/">Demo</a><a class="nav-link active" href="/fluid-coding-site/docs/">Docs</a><a class="nav-link" href="https://github.com/badetitou/fluid-coding">GitHub</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> Performance budgets — FAF</nav><article class="prose"><h1 id="performance-budgets--faf">Performance budgets — FAF</h1>
+<p><strong>Fast as Fuck</strong> is a product requirement. These budgets are release gates. Measure before optimizing;
+record the result in the PR.</p>
+<h2 id="budgets">Budgets</h2>
+<table>
+<thead>
+<tr>
+<th>Path</th>
+<th>Budget</th>
+<th>How</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Cached matrix API p95</td>
+<td>&lt; 20 ms</td>
+<td><code>cargo bench -p fluid-core</code> + local smoke</td>
+</tr>
+<tr>
+<td>Impact, 100k LOC graph p95</td>
+<td>&lt; 100 ms</td>
+<td>criterion fixture</td>
+</tr>
+<tr>
+<td>Incremental re-index, one file</td>
+<td>&lt; 2 s</td>
+<td>integration test with a temp repo</td>
+</tr>
+<tr>
+<td>Cold server start, small repo</td>
+<td>&lt; 150 ms</td>
+<td><code>hyperfine ./target/release/fluid-server --check</code></td>
+</tr>
+<tr>
+<td>First contentful paint, local</td>
+<td>&lt; 300 ms</td>
+<td>Playwright trace, throttled CPU 4×</td>
+</tr>
+<tr>
+<td>Initial JS, gzip</td>
+<td>&lt; 150 KB</td>
+<td><code>scripts/check-bundle.mjs</code></td>
+</tr>
+<tr>
+<td>Map at 5,000 cells</td>
+<td>60 fps pan/zoom</td>
+<td>Playwright + requestAnimationFrame trace</td>
+</tr>
+<tr>
+<td>Memory, 1M LOC</td>
+<td>&lt; 300 MB</td>
+<td>RSS after index and 100 requests</td>
+</tr>
+<tr>
+<td>Idle CPU</td>
+<td>~0%</td>
+<td>no polling; SSE only while a job runs</td>
+</tr>
+</tbody>
+</table>
+<p>WASM adds: one transfer of the graph per generation, no per-cell crossing, worker-owned instance,
+and a hard cap of 50 ms main-thread work per interaction.</p>
+<h2 id="rules">Rules</h2>
+<ol>
+<li>No N+1 requests. Batch by generation or selection.</li>
+<li>No graph computation in React. The server or wasm worker computes; the client renders.</li>
+<li>Virtualize lists over 100 rows and draw only visible map cells.</li>
+<li>Stream long jobs with SSE; return a job id immediately.</li>
+<li>Cache by <code>(generation, query)</code>; bump generation on any index mutation.</li>
+<li>Avoid JSON round-trips in hot loops; use typed structs and borrowed slices in Rust.</li>
+<li>No new UI dependency without a bundle-size note in the PR.</li>
+<li>A regression over budget blocks the release unless an ADR records the exception.</li>
+</ol>
+<h2 id="current-baseline">Current baseline</h2>
+<p>Not measured yet. The scaffold has no benchmark harness. First task: add criterion benches for
+<code>build_matrix</code> and <code>analyze_impact</code>, and the bundle check after the first web build.</p>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/quality/performance.md">docs/quality/performance.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — the understanding and review surface for agent-driven coding.</span><span>Local-first · Rust core · static site</span></div></footer></body></html>

@@ -1,0 +1,88 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ADR-0013 — Plugin delivery tiers: web, WASM and native Rust · fluid-coding</title><meta name="description" content="- Status: accepted"><meta property="og:title" content="ADR-0013 — Plugin delivery tiers: web, WASM and native Rust · fluid-coding"><meta property="og:description" content="- Status: accepted"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.D9k93Xz8.css"></head><body><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Home</a><a class="nav-link" href="/fluid-coding-site/demo/">Demo</a><a class="nav-link active" href="/fluid-coding-site/docs/">Docs</a><a class="nav-link" href="https://github.com/badetitou/fluid-coding">GitHub</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> ADR-0013 — Plugin delivery tiers: web, WASM and native Rust</nav><article class="prose"><h1 id="adr-0013--plugin-delivery-tiers-web-wasm-and-native-rust">ADR-0013 — Plugin delivery tiers: web, WASM and native Rust</h1>
+<ul>
+<li>Status: accepted</li>
+<li>Date: 2026-11-25</li>
+</ul>
+<h2 id="context">Context</h2>
+<p>fluid-coding is a plugin-first platform. A contributor who only wants to add a panel, a tag renderer
+or a task-card decoration should not have to write Rust. At the same time, code intelligence, graph
+building and impact analysis are hot paths where a native Rust implementation is much faster than
+JavaScript or an interpreted plugin. A single “plugin” shape that forces one runtime would make both
+cases painful.</p>
+<p>ADR-0008 fixed typed plugin kinds. This ADR fixes <strong>where a plugin executes</strong> and what it is allowed
+to touch, independently of its kind.</p>
+<h2 id="decision">Decision</h2>
+<p>Every plugin has one versioned manifest. <code>kind</code> says what contract it implements; <code>runtime</code> says where
+it executes. The manifest gains additive fields: <code>runtime</code>, <code>host</code>, <code>entry</code>, <code>permissions</code>, <code>slots</code> and
+<code>contractVersion</code>. Older manifests default to the current native built-in runtime so the wire stays
+compatible.</p>
+<p>Three delivery tiers are supported:</p>
+<table>
+<thead>
+<tr>
+<th>Runtime</th>
+<th>Language</th>
+<th>Host</th>
+<th>Good for</th>
+<th>Trust</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>web</code></td>
+<td>TypeScript + CSS</td>
+<td>browser</td>
+<td>panels, widgets, renderers, task/tag decorations</td>
+<td>low: no direct I/O or writes</td>
+</tr>
+<tr>
+<td><code>wasm</code></td>
+<td>Rust or another WASM language</td>
+<td>worker or server</td>
+<td>portable analyzers, checks, formatters, third-party compute</td>
+<td>medium: validated JSON, no ambient I/O</td>
+</tr>
+<tr>
+<td><code>native</code></td>
+<td>Rust crate or process</td>
+<td><code>fluid-server</code></td>
+<td>parsers, graph/index hot paths, external agent/LLM CLIs</td>
+<td>high: explicit opt-in and permissions</td>
+</tr>
+</tbody>
+</table>
+<p>There are three delivery tiers but four runtime values: <code>web</code>, <code>wasm</code>, <code>native</code> for a linked Rust crate,
+and <code>process</code> for an external executable. <code>process</code> is the native tier’s sandbox-friendly shape.</p>
+<p>All tiers speak the same ports: <code>AgentPort</code>, <code>NarrativePort</code>, <code>LanguagePlugin</code>, and the patch/checkpoint
+contracts. A <code>web</code> plugin consumes ports through the host API; it never calls <code>bffClient</code>, urql or a
+write store directly. A <code>wasm</code> or <code>native</code> plugin implements a data-producing port and returns validated
+JSON. A native process adapter (opencode, Claude Code, LLM CLI) still goes through <code>AgentPort</code> or
+<code>NarrativePort</code>; speed does not bypass the contract.</p>
+<p>The activation lifecycle is: discover → validate manifest and contract version → check permissions →
+activate → bind ports and UI slots → run contract test → usable. A broken plugin fails in isolation and
+is reported in the UI; it never takes down the workbench.</p>
+<p><code>permissions</code> is explicit: <code>workspace:read</code>, <code>workspace:write</code>, <code>tasks:read</code>, <code>network:out</code>,
+<code>process:spawn</code>. Any plugin asking for <code>workspace:write</code> must produce patch proposals and go through the
+existing trust mode and checkpoint flow. <code>network:out</code> and <code>process:spawn</code> require user consent.</p>
+<p>Adding a plugin always means the same set of artifacts:</p>
+<ol>
+<li>a manifest with id, kind, runtime, version, capabilities, permissions and contract version;</li>
+<li>an implementation for the chosen tier (<code>.tsx</code> + CSS for <code>web</code>, WASM module for <code>wasm</code>, Rust
+crate/process for <code>native</code>);</li>
+<li>an example and a contract test beside it;</li>
+<li>a short <code>README.md</code> explaining the port, permissions and slots;</li>
+<li>registration in a plugin collection, never an ad-hoc import in a page or route.</li>
+</ol>
+<p>Built-in plugins use the same path. Today’s fake/opencode/Claude Code agents, static language providers
+and deterministic narrative are native built-ins; Monaco is the built-in <code>web</code> editor surface; the pure
+Rust core is also compiled to WASM for portable reuse.</p>
+<h2 id="consequences">Consequences</h2>
+<ul>
+<li>Frontend-only contributors can extend the UI without a Rust toolchain.</li>
+<li>Hot paths can stay native Rust without changing the UI or wire contracts.</li>
+<li>Third-party compute defaults to WASM; native and process plugins are explicit trust decisions.</li>
+<li>The registry must expose runtime and permissions, not just capabilities.</li>
+<li>Manifest fields are additive; zod and serde schemas plus a fixture are the drift alarm.</li>
+<li>New plugin kinds still require an ADR or contract proposal, as ADR-0008 says.</li>
+</ul>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/decisions/ADR-0013-plugin-delivery-tiers.md">docs/decisions/ADR-0013-plugin-delivery-tiers.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — the understanding and review surface for agent-driven coding.</span><span>Local-first · Rust core · static site</span></div></footer></body></html>

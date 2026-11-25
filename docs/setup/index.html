@@ -1,0 +1,29 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>First-run setup · fluid-coding</title><meta name="description" content="A fresh app opens on /setup instead of the map. Setup has two front doors that produce the same"><meta property="og:title" content="First-run setup · fluid-coding"><meta property="og:description" content="A fresh app opens on /setup instead of the map. Setup has two front doors that produce the same"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.D9k93Xz8.css"></head><body><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Home</a><a class="nav-link" href="/fluid-coding-site/demo/">Demo</a><a class="nav-link active" href="/fluid-coding-site/docs/">Docs</a><a class="nav-link" href="https://github.com/badetitou/fluid-coding">GitHub</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> First-run setup</nav><article class="prose"><h1 id="first-run-setup">First-run setup</h1>
+<p>A fresh app opens on <code>/setup</code> instead of the map. Setup has two front doors that produce the same
+reviewable proposal:</p>
+<ul>
+<li><strong>Guided</strong> — name, root path, repository rows, language checkboxes, plugin checkboxes and trust mode.</li>
+<li><strong>Chat</strong> — “I want to work on fluid at ~/dev/fluid”. An LLM may help parse the sentence, but the
+deterministic filesystem scan is the source of truth.</li>
+</ul>
+<p>See <a href="../decisions/ADR-0015-first-run-project-setup/">ADR-0015</a>.</p>
+<h2 id="what-setup-does">What setup does</h2>
+<ol>
+<li>Reads the local project index (<code>~/.fluid-coding/projects.json</code>) and the plugin registry.</li>
+<li>Scans the chosen directory: <code>.git</code>, <code>package.json</code>, <code>tsconfig.json</code>, <code>pom.xml</code>, <code>*.tonel</code>, README.</li>
+<li>Proposes a project with one row per repository, language providers and plugin choices with reasons.</li>
+<li>Lets the user edit the proposal, answer questions and enable extra permissions explicitly.</li>
+<li>On <strong>Apply</strong>, writes <code>.fluid-coding/project.json</code>, updates the index, activates the project and
+opens the map.</li>
+</ol>
+<h2 id="safety">Safety</h2>
+<ul>
+<li>Nothing is written before Apply. The default trust mode is <code>propose</code>.</li>
+<li>Paths from chat are untrusted text: they must resolve to an existing directory.</li>
+<li>Plugin ids are checked against the registry; hallucinated ids are dropped with a warning.</li>
+<li><code>network:out</code> and <code>process:spawn</code> permissions require a separate checkbox.</li>
+<li>If the LLM is unavailable or returns invalid JSON, setup still works offline.</li>
+</ul>
+<p>Setup can be reopened from Settings at any time. Adding a repository later is the same flow: edit
+the project definition or rerun setup and merge the proposal.</p>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/setup.md">docs/setup.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — the understanding and review surface for agent-driven coding.</span><span>Local-first · Rust core · static site</span></div></footer></body></html>

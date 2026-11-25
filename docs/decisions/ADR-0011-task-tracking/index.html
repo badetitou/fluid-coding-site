@@ -1,0 +1,70 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ADR-0011 — One normalized Task domain for local and forge workflows · fluid-coding</title><meta name="description" content="- Status: accepted"><meta property="og:title" content="ADR-0011 — One normalized Task domain for local and forge workflows · fluid-coding"><meta property="og:description" content="- Status: accepted"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.D9k93Xz8.css"></head><body><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Home</a><a class="nav-link" href="/fluid-coding-site/demo/">Demo</a><a class="nav-link active" href="/fluid-coding-site/docs/">Docs</a><a class="nav-link" href="https://github.com/badetitou/fluid-coding">GitHub</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> ADR-0011 — One normalized Task domain for local and forge workflows</nav><article class="prose"><h1 id="adr-0011--one-normalized-task-domain-for-local-and-forge-workflows">ADR-0011 — One normalized Task domain for local and forge workflows</h1>
+<ul>
+<li>Status: accepted</li>
+<li>Date: 2026-11-25</li>
+<li>Deciders: Benoit, fluid-coding team</li>
+</ul>
+<h2 id="context">Context</h2>
+<p>The team workflow in <code>badetitou-team</code> tracks the same work in three places: local Markdown issues in
+<code>.claude/issues/</code> managed by <code>board.py</code> (<code>id</code>, <code>title</code>, <code>status</code>, <code>parent</code>, <code>branch</code>, <code>labels</code>,
+<code>created</code>, <code>updated</code>), GitHub issues, sub-issues and Projects boards, and GitLab work items, child
+tasks, issue boards with <code>workflow::*</code> labels and milestones. Across all three the unit of work is
+one issue → one branch (<code>&lt;id&gt;-&lt;slug&gt;</code>) → one reviewable change with <code>Refs #&lt;id&gt;</code> and no attribution
+(PR/MR on a forge, <code>in-review</code> locally); the implementer receives a short brief instead of the whole
+session.</p>
+<p>fluid-coding must show that work next to code: symbols, cells, Change Briefs and agent sessions.
+Reading three different issue shapes in the shell would duplicate status names, filters and task→code
+links in TypeScript.</p>
+<h2 id="decision">Decision</h2>
+<ol>
+<li><strong>One Task domain in <code>fluid-core</code>.</strong> <code>TaskSource</code> is <code>local | github | gitlab</code>, <code>TaskStatus</code> is
+<code>todo | in_progress | in_review | done</code>, and keys are stable: <code>local:12</code>,
+<code>github:owner/repo#12</code>, <code>gitlab:group/project#7</code>. A task carries parent/children, labels,
+assignees, milestone, branch, remote reference and links to symbols, cells, changes and pull
+requests. <code>TaskStore</code> owns pure filters/sorts; core has no I/O.</li>
+<li><strong>Local Markdown is the interoperable edge.</strong> Parse and serialize the <code>board.py</code> frontmatter shape
+(statuses <code>todo</code>, <code>in-progress</code>, <code>in-review</code>, <code>done</code>) and the Context / Acceptance criteria /
+Out of scope body. Unknown frontmatter keys are tolerated on input; output uses the board field
+set plus optional fluid links.</li>
+<li><strong>Briefs are generated, not authored by a model.</strong> <code>make_brief</code> extracts the three body sections
+into a 10–20 line handoff with branch <code>&lt;number&gt;-&lt;slug&gt;</code> and footer <code>Refs #&lt;number&gt;</code>, plus files,
+commands and rules supplied as context.</li>
+<li><strong>Capabilities describe providers, not connections.</strong> <code>/api/tasks/providers</code> returns manifests
+with read/create/update/moveStatus/subTasks/board/milestone/pullRequests flags. Only local tasks
+can be created, and writes mutate the in-memory store. GitHub and GitLab exist as keys, fixtures
+and advertised capabilities; live forge adapters are a later slice.</li>
+<li><strong>Rust owns the wire.</strong> camelCase JSON from <code>fluid-core</code> is mirrored by zod schemas in
+<code>packages/contracts/src/tasks.ts</code> and checked by <code>fixtures/contracts/tasks.json</code>. The web Tasks
+board stays mock-first; <code>VITE_API_MODE=server</code> points it at Rust.</li>
+</ol>
+<h2 id="consequences">Consequences</h2>
+<p>Positive:</p>
+<ul>
+<li>One board, one set of status filters and one task→code link vocabulary across providers.</li>
+<li>Local issue files remain usable by <code>board.py</code>; existing issues need no migration.</li>
+<li>Briefs are deterministic and testable; the implementer gets context without session history.</li>
+<li>Providers can be advertised before credentials exist, and the shell can show what is not wired.</li>
+</ul>
+<p>Negative:</p>
+<ul>
+<li>Status naming has two encodings: snake_case on the wire, kebab-case in local frontmatter. Core maps
+both, and they must stay aligned with <code>board.py</code> and forge labels.</li>
+<li>GitHub/GitLab entries are not live; capability flags must not be read as “sync implemented”.</li>
+<li>Create/patch is not durable yet; file persistence and forge writes remain outstanding.</li>
+<li>Task keys contain <code>:</code> and <code>#</code>, so clients must percent-encode path segments.</li>
+</ul>
+<h2 id="alternatives-considered">Alternatives considered</h2>
+<ul>
+<li><strong>Forge as the only source of truth.</strong> Rejected: many projects have no remote, and the local flow
+has no PR; the board must work offline.</li>
+<li><strong>Tasks in a database.</strong> Rejected: the repository is the source of truth and local issues are plain
+committed files; a database adds a deployment and an export step.</li>
+<li><strong>Provider adapters in TypeScript.</strong> Rejected: duplicates filters and links in the presentation
+layer and breaks the Rust-first boundary; adapters belong behind core ports.</li>
+<li><strong>LLM-authored briefs.</strong> Rejected: extraction from structured issue bodies is deterministic,
+cheaper and reviewable; enrichment can be added later.</li>
+</ul>
+<h2 id="migration">Migration</h2>
+<p>No production task data exists. Local issues keep their <code>board.py</code> shape and can be adopted by path.
+GitHub/GitLab tasks are normalized snapshots only until forge adapters are added.</p>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/decisions/ADR-0011-task-tracking.md">docs/decisions/ADR-0011-task-tracking.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — the understanding and review surface for agent-driven coding.</span><span>Local-first · Rust core · static site</span></div></footer></body></html>

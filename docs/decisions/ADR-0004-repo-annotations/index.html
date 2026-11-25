@@ -1,0 +1,20 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ADR-0004 — Tags and views are files in `.fluid/` · fluid-coding</title><meta name="description" content="- Status: accepted"><meta property="og:title" content="ADR-0004 — Tags and views are files in `.fluid/` · fluid-coding"><meta property="og:description" content="- Status: accepted"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.D9k93Xz8.css"></head><body><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Home</a><a class="nav-link" href="/fluid-coding-site/demo/">Demo</a><a class="nav-link active" href="/fluid-coding-site/docs/">Docs</a><a class="nav-link" href="https://github.com/badetitou/fluid-coding">GitHub</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> ADR-0004 — Tags and views are files in `.fluid/`</nav><article class="prose"><h1 id="adr-0004--tags-and-views-are-files-in-fluid">ADR-0004 — Tags and views are files in <code>.fluid/</code></h1>
+<ul>
+<li>Status: accepted</li>
+<li>Date: 2026-11-24</li>
+</ul>
+<h2 id="context">Context</h2>
+<p>Architecture annotations are valuable only if they survive tool changes, reviews and agents. A database
+is fast but opaque, hard to review and easy to lose. Tags also need to be edited by humans, agents and
+rules, and diffed in pull requests.</p>
+<h2 id="decision">Decision</h2>
+<p>Store taxonomy, tags, views, checks and config as plain JSON/TOML under <code>.fluid/</code>. The server loads and
+watches the folder; SQLite and in-memory indexes are disposable caches in <code>.fluid-coding/cache/</code>.
+Tags target provider-stable keys. Orphans are computed, not a stored status.</p>
+<h2 id="consequences">Consequences</h2>
+<ul>
+<li>Tag changes are reviewable in git and portable across machines.</li>
+<li>Write paths must be atomic (temp file + rename) and validated with zod/serde.</li>
+<li>A rename can orphan a tag; the UI must surface it and offer migration.</li>
+</ul>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/decisions/ADR-0004-repo-annotations.md">docs/decisions/ADR-0004-repo-annotations.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — the understanding and review surface for agent-driven coding.</span><span>Local-first · Rust core · static site</span></div></footer></body></html>

@@ -1,0 +1,21 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ADR-0005 — MCP first, AgentPort for in-app agents · fluid-coding</title><meta name="description" content="- Status: accepted"><meta property="og:title" content="ADR-0005 — MCP first, AgentPort for in-app agents · fluid-coding"><meta property="og:description" content="- Status: accepted"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.D9k93Xz8.css"></head><body><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Home</a><a class="nav-link" href="/fluid-coding-site/demo/">Demo</a><a class="nav-link active" href="/fluid-coding-site/docs/">Docs</a><a class="nav-link" href="https://github.com/badetitou/fluid-coding">GitHub</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> ADR-0005 — MCP first, AgentPort for in-app agents</nav><article class="prose"><h1 id="adr-0005--mcp-first-agentport-for-in-app-agents">ADR-0005 — MCP first, AgentPort for in-app agents</h1>
+<ul>
+<li>Status: accepted</li>
+<li>Date: 2026-11-24</li>
+</ul>
+<h2 id="context">Context</h2>
+<p>Developers already use Claude Code, opencode, Codex and specialised agents such as the Pharo MCP stack.
+fluid-coding should not replace them or build another proprietary tool loop. It still needs an in-app
+chat that can see the current map, tags and change.</p>
+<h2 id="decision">Decision</h2>
+<p>Expose fluid-coding’s capabilities as an <strong>MCP server</strong> first: <code>get_matrix</code>, <code>cell_symbols</code>,
+<code>get_entity</code>, <code>get_relations</code>, <code>get_impact</code>, <code>get_diff</code>, <code>list_tags</code>, <code>propose_tag</code>. External agents
+use these tools. The in-app agent uses the same tools through an <code>AgentPort</code> with adapters for opencode
+and Claude Code. Write tools require a trust mode and are audited.</p>
+<h2 id="consequences">Consequences</h2>
+<ul>
+<li>One tool contract, one documentation source, two integration surfaces.</li>
+<li>The in-app agent must not get a private shortcut that external agents lack.</li>
+<li>MCP schemas are part of the release contract and are tested with fixtures.</li>
+</ul>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/decisions/ADR-0005-agent-integration.md">docs/decisions/ADR-0005-agent-integration.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — the understanding and review surface for agent-driven coding.</span><span>Local-first · Rust core · static site</span></div></footer></body></html>

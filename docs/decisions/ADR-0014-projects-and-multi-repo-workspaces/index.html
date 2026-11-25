@@ -1,0 +1,74 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ADR-0014 — Projects are multi-repo workspaces · fluid-coding</title><meta name="description" content="- Status: accepted"><meta property="og:title" content="ADR-0014 — Projects are multi-repo workspaces · fluid-coding"><meta property="og:description" content="- Status: accepted"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.D9k93Xz8.css"></head><body><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Home</a><a class="nav-link" href="/fluid-coding-site/demo/">Demo</a><a class="nav-link active" href="/fluid-coding-site/docs/">Docs</a><a class="nav-link" href="https://github.com/badetitou/fluid-coding">GitHub</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> ADR-0014 — Projects are multi-repo workspaces</nav><article class="prose"><h1 id="adr-0014--projects-are-multi-repo-workspaces">ADR-0014 — Projects are multi-repo workspaces</h1>
+<ul>
+<li>Status: accepted</li>
+<li>Date: 2026-11-25</li>
+</ul>
+<h2 id="context">Context</h2>
+<p>The first POC has one <code>FLUID_WORKSPACE</code>, one code graph and one matrix. Real work is different: a
+person moves between several projects, and one project is often several repositories (an app, a
+backend, a shared library, an infrastructure repo). A monorepo is only one special case. The backend
+cannot assume one checkout, and the frontend cannot show a single flat file tree as if it were the whole
+project.</p>
+<p>This is a local-first workbench: no hosted registry is required to define or switch projects.</p>
+<h2 id="decision">Decision</h2>
+<p>Separate three concepts:</p>
+<ul>
+<li><strong>Project</strong>: a persistent local definition with an id, a name, repository members and project-level
+settings (trust defaults, plugins, tags, task providers).</li>
+<li><strong>Workspace</strong>: the active local checkout of a project. It has a root path and a set of repository
+roots.</li>
+<li><strong>Repository</strong>: one checkout inside the workspace, with a stable <code>repoKey</code>, a local path relative to
+the workspace, an optional remote URL and a default branch.</li>
+</ul>
+<p>A project definition lives in <code>.fluid-coding/project.json</code> inside the project root and is discoverable
+from a local <code>~/.fluid-coding/projects.json</code> index. Neither requires a network service.</p>
+<p>The server model becomes project- and repo-aware:</p>
+<ul>
+<li><code>ProjectRegistry</code> loads projects and activates one at a time. The first implementation keeps one
+active project per server process; API paths are additive so later instances can host several.</li>
+<li><code>GET/POST /api/projects</code>, <code>GET/PATCH /api/projects/{id}</code>, <code>POST /api/projects/{id}/activate</code> and
+<code>GET /api/projects/{id}/repos</code> expose the local model.</li>
+<li>Existing graph, matrix, impact, task, edit and checkpoint routes accept an active project scope.
+Repo-scoped variants use <code>/api/projects/{id}/repos/{repoKey}/...</code>. Flat routes stay as the single-repo
+compatibility view.</li>
+<li>Path validation is relative to the member repository, never only to the workspace root. A path must
+resolve inside the repo it claims; cross-repo writes are separate, explicit patches.</li>
+<li>Entity keys are namespaced at project level as <code>&lt;repoKey&gt;::&lt;path&gt;#&lt;symbol&gt;</code>. Providers keep their
+local keys; the project layer adds the prefix when composing graphs.</li>
+<li><code>FilePatch</code> gains an additive <code>repo</code> field (default: the active repo) and checkpoints record the repo
+key. Restoring a checkpoint restores files in their original repository.</li>
+<li>Cross-repo edges come from dependency manifests and language imports. They are typed relations with
+provenance, not guessed from paths.</li>
+<li>Indexes, graphs and caches are keyed by <code>(projectId, repoKey, commit)</code> so work is reused per repo and
+composition stays fast. This preserves FAF budgets.</li>
+</ul>
+<p>The frontend becomes project-aware without becoming a monorepo-only UI:</p>
+<ul>
+<li>A project switcher in the shell selects the active project; the URL carries <code>project</code> and optional
+<code>repo</code> so views are shareable.</li>
+<li>The structure map shows one lane per repository, with cross-repo edges rendered as links between
+lanes. Miller columns are scoped to the selected repo by default and can widen to the project.</li>
+<li>The editor tab label includes the repo. “Open in VS Code” uses the member repo’s absolute path.</li>
+<li>The agent dock receives the active project/repo context in the task brief. A patch can touch multiple
+repos only when the agent returns explicit <code>repo</code> fields and trust allows it.</li>
+<li>Plugins declare supported <code>repoKey</code>/language pairs. A native or WASM provider can be activated per
+repo; a web plugin renders in project-level slots without knowing where data came from.</li>
+</ul>
+<h2 id="consequences">Consequences</h2>
+<ul>
+<li>A single-repo project is the degenerate case and must keep working unchanged.</li>
+<li>Adding multi-repo support is additive in the wire contracts: <code>repo</code>, <code>projectId</code> and namespaced keys.</li>
+<li>Existing flat routes remain for the POC and delegate to the active project/repo.</li>
+<li>Trust and checkpoints must be evaluated per repo; a bug in one repo cannot write into another.</li>
+<li>Cross-repo intelligence depends on real dependency edges. Missing edges are reported as unknown, not
+invented.</li>
+<li>Project switching is a local state change; no account, server or cloud sync is introduced.</li>
+</ul>
+<h2 id="out-of-scope">Out of scope</h2>
+<ul>
+<li>Hosted project registries or multi-user projects.</li>
+<li>Running one server process per repository.</li>
+<li>Automatic detection of every possible package-manager relationship in the first slice; start with
+explicit project config plus TS/JS package imports.</li>
+</ul>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/decisions/ADR-0014-projects-and-multi-repo-workspaces.md">docs/decisions/ADR-0014-projects-and-multi-repo-workspaces.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — the understanding and review surface for agent-driven coding.</span><span>Local-first · Rust core · static site</span></div></footer></body></html>

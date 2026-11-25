@@ -1,0 +1,20 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ADR-0006 — Local single executable first; desktop and hosted later · fluid-coding</title><meta name="description" content="- Status: accepted"><meta property="og:title" content="ADR-0006 — Local single executable first; desktop and hosted later · fluid-coding"><meta property="og:description" content="- Status: accepted"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.D9k93Xz8.css"></head><body><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Home</a><a class="nav-link" href="/fluid-coding-site/demo/">Demo</a><a class="nav-link active" href="/fluid-coding-site/docs/">Docs</a><a class="nav-link" href="https://github.com/badetitou/fluid-coding">GitHub</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> ADR-0006 — Local single executable first; desktop and hosted later</nav><article class="prose"><h1 id="adr-0006--local-single-executable-first-desktop-and-hosted-later">ADR-0006 — Local single executable first; desktop and hosted later</h1>
+<ul>
+<li>Status: accepted</li>
+<li>Date: 2026-11-24</li>
+</ul>
+<h2 id="context">Context</h2>
+<p>The product must work on a real repository, with git, file watching and agent processes. A cloud-only
+service cannot access those without a sync layer. A desktop shell adds packaging complexity before the
+experience is proven.</p>
+<h2 id="decision">Decision</h2>
+<p>Ship a <strong>local first</strong>: one Rust executable embeds the web assets, opens the browser, and serves the API.
+The same API runs in a hosted container later. A Tauri desktop shell, single binary installers and a
+hosted service are later deployment options, not v0 requirements.</p>
+<h2 id="consequences">Consequences</h2>
+<ul>
+<li>No Node runtime is required for the installed product.</li>
+<li>The web UI is always the same; only the workspace location changes.</li>
+<li>Offline use is a first-class path; no telemetry or cloud dependency for core features.</li>
+</ul>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/decisions/ADR-0006-local-first.md">docs/decisions/ADR-0006-local-first.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — the understanding and review surface for agent-driven coding.</span><span>Local-first · Rust core · static site</span></div></footer></body></html>

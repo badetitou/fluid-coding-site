@@ -1,0 +1,238 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Architecture · fluid-coding</title><meta name="description" content="fluid-coding is a local-first Structure workbench. The browser is a view; the Rust workspace owns"><meta property="og:title" content="Architecture · fluid-coding"><meta property="og:description" content="fluid-coding is a local-first Structure workbench. The browser is a view; the Rust workspace owns"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.D9k93Xz8.css"></head><body><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Home</a><a class="nav-link" href="/fluid-coding-site/demo/">Demo</a><a class="nav-link active" href="/fluid-coding-site/docs/">Docs</a><a class="nav-link" href="https://github.com/badetitou/fluid-coding">GitHub</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> Architecture</nav><article class="prose"><h1 id="architecture">Architecture</h1>
+<blockquote>
+<p>Status: accepted, 2026-11-25. Supersedes the TypeScript/Fastify topology in the earlier plan and
+the read-only POC sequencing in earlier notes (<a href="../decisions/ADR-0012-poc-scope/">ADR-0012</a>).</p>
+</blockquote>
+<h2 id="1-shape">1. Shape</h2>
+<p>fluid-coding is a local-first <strong>Structure workbench</strong>. The browser is a view; the Rust workspace owns
+the graph, the index, tags, changes, agent sessions and patch/checkpoint state.</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>┌───────────────────────────────────────────────────────────────┐</span></span>
+<span class="line"><span>│ Browser (React 19, TypeScript, Monaco loaded lazily)           │</span></span>
+<span class="line"><span>│ Now · Structure · Code · Changes · Tasks · Agents · Settings   │</span></span>
+<span class="line"><span>│ renders JSON, local filtering only, virtualized lists          │</span></span>
+<span class="line"><span>└───────────────┬───────────────────────────────┬───────────────┘</span></span>
+<span class="line"><span>                │ HTTP + SSE                    │ wasm-bindgen</span></span>
+<span class="line"><span>┌───────────────▼───────────────┐   ┌───────────▼───────────────┐</span></span>
+<span class="line"><span>│ fluid-server (axum, native)   │   │ fluid-wasm (browser/edge) │</span></span>
+<span class="line"><span>│ fs · git · process · MCP      │   │ read-only analysis demo   │</span></span>
+<span class="line"><span>│ agents · checkpoints · web    │   │ worker-safe, no I/O       │</span></span>
+<span class="line"><span>└───────────────┬───────────────┘   └───────────┬───────────────┘</span></span>
+<span class="line"><span>                └───────────────┬───────────────┘</span></span>
+<span class="line"><span>                        ┌───────▼────────┐</span></span>
+<span class="line"><span>                        │  fluid-core    │</span></span>
+<span class="line"><span>                        │ pure Rust      │</span></span>
+<span class="line"><span>                        │ graph · matrix │</span></span>
+<span class="line"><span>                        │ impact · tags  │</span></span>
+<span class="line"><span>                        │ tasks · ports  │</span></span>
+<span class="line"><span>                        │ patches        │</span></span>
+<span class="line"><span>                        └────────────────┘</span></span></code></pre>
+<p>The same core runs native and WASM. It never opens a file, runs a command, reads a clock, or awaits a
+future. Time, paths, I/O and process calls are passed in by adapters.</p>
+<p>The first POC is installed as a macOS <code>.app</code>: <code>fluid-cli</code> embeds <code>apps/web/dist</code>, serves it from a
+loopback-only axum server and opens the browser. Desktop and hosted modes come later.</p>
+<h2 id="2-crates">2. Crates</h2>
+<table>
+<thead>
+<tr>
+<th>Crate</th>
+<th>Depends on</th>
+<th>Must not depend on</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>fluid-core</code></td>
+<td>serde, thiserror</td>
+<td>tokio, axum, git2, reqwest, std::fs, std::process</td>
+</tr>
+<tr>
+<td><code>fluid-index</code></td>
+<td>fluid-core, gix/git2, tree-sitter, reqwest, tokio</td>
+<td>axum, React</td>
+</tr>
+<tr>
+<td><code>fluid-server</code></td>
+<td>fluid-core, fluid-index, axum, tokio, tower-http</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>fluid-wasm</code></td>
+<td>fluid-core, wasm-bindgen, serde-wasm-bindgen</td>
+<td>std::fs, tokio, axum</td>
+</tr>
+<tr>
+<td><code>fluid-cli</code></td>
+<td>fluid-server, build-time generated assets</td>
+<td>0.0.0.0 binds, network installs</td>
+</tr>
+</tbody>
+</table>
+<p>Dependency direction is one-way: <code>cli/server → index → core</code>. A feature request that would put I/O in
+<code>core</code> is rejected; add a port and an adapter instead.</p>
+<h2 id="3-wire-contracts">3. Wire contracts</h2>
+<p>Rust is the source of truth.</p>
+<ol>
+<li>Domain structs live in <code>fluid-core</code>, with <code>serde(rename_all = "camelCase")</code> except where the wire
+contract deliberately uses <code>snake_case</code> (trust modes, task status query values).</li>
+<li>TypeScript contracts mirror the Rust structs in <code>packages/contracts</code>; shared JSON fixtures are the
+current drift alarm. Generated types remain the target once the generator lands.</li>
+<li>zod schemas validate untrusted boundaries: agent output, LLM output, MCP input, URL state, plugin
+manifests and server JSON.</li>
+<li>A contract change requires: Rust test, fixture update, TypeScript typecheck and web test.</li>
+<li>No <code>any</code> in TypeScript; no panics in request paths in Rust.</li>
+</ol>
+<h2 id="4-request-path">4. Request path</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>GET /api/matrix?ref=HEAD</span></span>
+<span class="line"><span>  → axum handler</span></span>
+<span class="line"><span>  → WorkspaceService generation (git oid + index epoch)</span></span>
+<span class="line"><span>  → cached CodeMatrix</span></span>
+<span class="line"><span>  → JSON</span></span></code></pre>
+<p>Rules:</p>
+<ul>
+<li>No handler calls git or the filesystem on every request. Index and matrix are cached by generation.</li>
+<li>Mutations bump the generation and invalidate dependent caches.</li>
+<li>Long operations return a job id and stream progress over SSE.</li>
+<li>Every response is typed, size-bounded and trace-instrumented.</li>
+<li><code>/api/health</code> is cheap and never blocks on the index.</li>
+<li><code>/api/tasks*</code>, <code>/api/edits*</code>, <code>/api/checkpoints*</code>, <code>/api/agents/*</code> and <code>/api/narrative/*</code> use the
+same typed error mapping and zod-validated payloads.</li>
+</ul>
+<h2 id="5-indexing">5. Indexing</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>files ──► tree-sitter ──► symbols/ranges ─┐</span></span>
+<span class="line"><span>       ──► SCIP index ──► exact relations ──┼──► CodeGraph</span></span>
+<span class="line"><span>       ──► git ─────────► diffs/history ────┘        │</span></span>
+<span class="line"><span>                                                    ├─► matrix (layer × domain)</span></span>
+<span class="line"><span>                                                    ├─► impact (reverse BFS)</span></span>
+<span class="line"><span>                                                    ├─► tags / orphans</span></span>
+<span class="line"><span>                                                    ├─► change briefs</span></span>
+<span class="line"><span>                                                    └─► MCP tools</span></span></code></pre>
+<p>Model gives fine-grained SCIP-keyed entities. Structure gives the layer × domain quotient, cell symbols
+and impact. <code>SymbolLinker</code> joins by SCIP key, then by <code>file + name + range</code>, with a confidence badge.</p>
+<p>Incremental path: file watcher → debounce → reparse changed files → update graph slice → recompute
+matrix cells and impact → bump generation → SSE <code>generation</code> event.</p>
+<p>Language support is plugin-based: TypeScript/JavaScript and Java static providers plus a Pharo Tonel
+static provider ship in the POC; live Pharo via PLexus/MCP uses the same <code>LanguagePlugin</code> trait.</p>
+<h2 id="6-tags-changes-and-edits">6. Tags, changes and edits</h2>
+<p>Tags are durable annotations in <code>.fluid/tags/*.json</code>, keyed by a provider-stable symbol key. The server
+loads them at startup, watches the folder, and keeps a derived index in memory. SQLite is a cache, never
+the source of truth.</p>
+<p>A Change Brief is assembled deterministically, then optionally narrated by an LLM. Facts come first:
+files, symbols, cells, impacted cells, relation changes, touched/orphaned tags, checks, risk factors.
+The narrative never replaces the evidence.</p>
+<p>Chat turns propose patches through <code>PatchProposal</code>/<code>FilePatch</code>/<code>PatchHunk</code>. <code>apply_hunks</code> is pure and
+runs bottom-up. Before any write, the server creates a <code>Checkpoint</code> with the exact previous file
+contents. Default trust is <code>propose</code>; <code>edit</code> and <code>auto</code> are explicit and still checkpoint every write.
+Paths are workspace-relative and traversal is rejected.</p>
+<h2 id="7-wasm-and-online">7. WASM and online</h2>
+<p>There are two online paths:</p>
+<ol>
+<li><strong>Hosted workspace server</strong> (same Rust binary in a container): full features, git, filesystem, MCP.</li>
+<li><strong>WASM-only mode</strong> (browser/edge): open a fixture or a public repo snapshot, compute matrix, impact
+and tag queries in a worker. No writes, no process, no filesystem.</li>
+</ol>
+<p>The WASM facade exposes coarse calls, not chatty getters:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="ts"><code><span class="line"><span style="color:#B392F0">buildMatrix</span><span style="color:#E1E4E8">(graphJson, specJson, generation): string</span></span>
+<span class="line"><span style="color:#B392F0">analyzeImpact</span><span style="color:#E1E4E8">(graphJson, specJson, changedJson, base, head): string</span></span>
+<span class="line"><span style="color:#B392F0">findOrphans</span><span style="color:#E1E4E8">(tagsJson, knownKeysJson): string</span></span></code></pre>
+<p>For large graphs, the worker owns the wasm instance and transfers JSON once. The UI never blocks the
+main thread on graph work.</p>
+<h2 id="8-web-shell">8. Web shell</h2>
+<ul>
+<li>React 19 + Vite, no antd, no component framework in the coding shell.</li>
+<li>CSS modules or a single tokenized stylesheet; no hardcoded colors in components.</li>
+<li>Route-level code splitting; initial bundle budget 150 KB gzip.</li>
+<li>Graph rendering: custom canvas for the map, SVG for small diagrams; only visible cells draw.</li>
+<li>Tables are virtualized above 100 rows.</li>
+<li>State: URL for selection, a small store for server cache; no graph semantics in the client.</li>
+<li>Monaco is the code surface, loaded lazily with LSP-style navigation. “Open in VS Code” is the escape
+hatch, not the editor.</li>
+<li>The agent dock is persistent across routes: task brief → chat turn → patch review → apply → checkpoint.</li>
+</ul>
+<h2 id="9-plugin-seams">9. Plugin seams</h2>
+<p><code>fluid-core/src/plugins</code> owns contracts; upper layers own adapters and I/O.</p>
+<table>
+<thead>
+<tr>
+<th>Kind</th>
+<th>Core contract</th>
+<th>POC adapters</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Agent</td>
+<td><code>AgentPort</code>, <code>AgentRequest</code>, <code>AgentResponse</code></td>
+<td>MCP tools, fake, opencode, Claude Code</td>
+</tr>
+<tr>
+<td>Language</td>
+<td><code>LanguagePlugin</code>, <code>LanguageProvider</code></td>
+<td>TypeScript, JavaScript, Java, Pharo Tonel; live Pharo later</td>
+</tr>
+<tr>
+<td>Narrative</td>
+<td><code>NarrativePort</code>, <code>NarrativeRequest</code></td>
+<td>deterministic offline, optional CLI/LLM adapter</td>
+</tr>
+<tr>
+<td>Editor</td>
+<td>patch/checkpoint types and <code>apply_hunks</code></td>
+<td>Monaco surface, “Open in VS Code” action</td>
+</tr>
+</tbody>
+</table>
+<p><code>PluginManifest</code> and <code>PluginRegistry</code> expose capabilities, runtime and permissions to the UI and to
+agents. Adding a capability means implementing a port, registering a manifest and adding a test; routes
+and components stay generic. See <a href="../decisions/ADR-0013-plugin-delivery-tiers/">ADR-0013</a> and the
+<a href="../plugin-authoring/">plugin authoring guide</a>.</p>
+<p>A plugin can be <strong>web-only</strong> (TypeScript/CSS in a UI slot), <strong>WASM</strong> (portable analyzer or check in a
+worker), or <strong>native Rust</strong> (fast parser, graph/index hot path, or external process adapter). <code>kind</code>
+chooses the contract; <code>runtime</code> chooses where it runs. Frontend plugins consume ports through the host
+API and never write data directly. Native speed does not bypass <code>AgentPort</code>, validation, trust mode or
+checkpoints.</p>
+<p>To add a plugin: write the manifest, implement the chosen tier, add an example and a contract test,
+document permissions and slots, then register it in a plugin collection. Built-ins follow the same path.</p>
+<h2 id="10-agents">10. Agents</h2>
+<p><code>AgentPort</code> is the one seam for MCP, opencode, Claude Code, the in-app agent and test doubles. The POC
+contract is deliberately small and object-safe:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="rust"><code><span class="line"><span style="color:#F97583">pub</span><span style="color:#F97583"> trait</span><span style="color:#B392F0"> AgentPort</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Send</span><span style="color:#F97583"> +</span><span style="color:#B392F0"> Sync</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">    fn</span><span style="color:#B392F0"> manifest</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&amp;</span><span style="color:#79B8FF">self</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">-&gt;</span><span style="color:#B392F0"> PluginManifest</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">    fn</span><span style="color:#B392F0"> run</span><span style="color:#E1E4E8">&lt;'</span><span style="color:#B392F0">a</span><span style="color:#E1E4E8">&gt;(</span></span>
+<span class="line"><span style="color:#F97583">        &amp;</span><span style="color:#E1E4E8">'</span><span style="color:#B392F0">a</span><span style="color:#79B8FF"> self</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">        request</span><span style="color:#F97583">:</span><span style="color:#F97583"> &amp;</span><span style="color:#E1E4E8">'</span><span style="color:#B392F0">a</span><span style="color:#B392F0"> AgentRequest</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">    ) </span><span style="color:#F97583">-&gt;</span><span style="color:#B392F0"> Pin</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">Box</span><span style="color:#E1E4E8">&lt;</span><span style="color:#F97583">dyn</span><span style="color:#B392F0"> Future</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">Output</span><span style="color:#F97583"> =</span><span style="color:#B392F0"> Result</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">AgentResponse</span><span style="color:#E1E4E8">, </span><span style="color:#B392F0">PluginError</span><span style="color:#E1E4E8">&gt;&gt; </span><span style="color:#F97583">+</span><span style="color:#B392F0"> Send</span><span style="color:#F97583"> +</span><span style="color:#E1E4E8"> '</span><span style="color:#B392F0">a</span><span style="color:#E1E4E8">&gt;&gt;;</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p><code>AgentResponse</code> carries messages, patch proposals and optional narrative. Streaming session lifecycle
+(<code>start</code>/<code>send</code>/<code>cancel</code>) is an additive extension of the same port. MCP remains the external tool
+contract: <code>get_matrix</code>, <code>cell_symbols</code>, <code>get_entity</code>, <code>get_relations</code>, <code>get_impact</code>, <code>get_diff</code>,
+<code>list_tags</code>, <code>propose_tag</code>, plus task reads. Every write path requires trust mode and is audited.</p>
+<h2 id="11-storage">11. Storage</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>.claude/issues/NNNN-slug.md   # canonical local tasks, board.py compatible</span></span>
+<span class="line"><span>.fluid/</span></span>
+<span class="line"><span>  taxonomy.json</span></span>
+<span class="line"><span>  tags/&lt;slug&gt;-&lt;hash&gt;.json</span></span>
+<span class="line"><span>  views/&lt;slug&gt;.json</span></span>
+<span class="line"><span>  checks/&lt;slug&gt;.json</span></span>
+<span class="line"><span>  config.json</span></span>
+<span class="line"><span>.structure/rules.toml         # baseline classifier</span></span>
+<span class="line"><span>.fluid-coding/cache/          # gitignored: graph, matrix, SQLite</span></span>
+<span class="line"><span>.fluid-coding/sessions/       # gitignored: chat history, audit</span></span>
+<span class="line"><span>.fluid-coding/checkpoints/    # gitignored when persisted; in-memory for the first slice</span></span></code></pre>
+<h2 id="12-projects-and-repositories">12. Projects and repositories</h2>
+<p>A project is a local, multi-repo workspace, not necessarily a monorepo. <code>.fluid-coding/project.json</code>
+lists member repositories with a stable <code>repoKey</code>, relative path and optional remote. A local index in
+<code>~/.fluid-coding/projects.json</code> lets the shell switch projects. See
+<a href="../decisions/ADR-0014-projects-and-multi-repo-workspaces/">ADR-0014</a>.</p>
+<p>The server activates one project at a time but models many: project and repo scopes are additive to the
+current flat API, entity keys are namespaced as <code>&lt;repoKey&gt;::&lt;path&gt;#&lt;symbol&gt;</code>, and patches/checkpoints
+record their repo. Path checks are relative to the member repo. Graph, matrix and cache entries are
+keyed by <code>(projectId, repoKey, commit)</code>; cross-repo edges come from explicit dependency data.</p>
+<p>The UI has a project switcher, one structure-map lane per repo, repo-scoped Miller columns, repo labels
+in editor tabs and repo-aware task briefs for agents. A single-repo project is the degenerate case and
+keeps the current behaviour.</p>
+<h2 id="13-poc-boundaries">13. POC boundaries</h2>
+<p>Included: chat patch proposals and checkpoints, opencode/Claude Code adapters, Monaco/LSP, TS/JS +
+Java + Pharo providers, and a required narrative port with optional model enrichment.</p>
+<p>Not in the first POC: hosted multi-user collaboration, CRDT editing, arbitrary plugin sandboxing beyond
+typed manifests, live forge write-back, and a second private tool loop next to MCP.</p>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/architecture.md">docs/architecture.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — the understanding and review surface for agent-driven coding.</span><span>Local-first · Rust core · static site</span></div></footer></body></html>

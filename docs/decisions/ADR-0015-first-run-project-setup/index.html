@@ -1,0 +1,62 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ADR-0015 — First-run project setup by guided form or chat · fluid-coding</title><meta name="description" content="- Status: accepted"><meta property="og:title" content="ADR-0015 — First-run project setup by guided form or chat · fluid-coding"><meta property="og:description" content="- Status: accepted"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.D9k93Xz8.css"></head><body><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Home</a><a class="nav-link" href="/fluid-coding-site/demo/">Demo</a><a class="nav-link active" href="/fluid-coding-site/docs/">Docs</a><a class="nav-link" href="https://github.com/badetitou/fluid-coding">GitHub</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> ADR-0015 — First-run project setup by guided form or chat</nav><article class="prose"><h1 id="adr-0015--first-run-project-setup-by-guided-form-or-chat">ADR-0015 — First-run project setup by guided form or chat</h1>
+<ul>
+<li>Status: accepted</li>
+<li>Date: 2026-11-25</li>
+</ul>
+<h2 id="context">Context</h2>
+<p>A new user opens fluid-coding and the first question is not “what do I review?” but “how do I tell you
+where my project lives?”. Today this requires knowing <code>.fluid-coding/project.json</code>, the plugin
+manifests and the repo layout (ADR-0014). That is too much friction for a prerelease tester.</p>
+<p>The user should be able to say <em>“I want to work on project X at ~/dev/x”</em> in a chat, or fill a short
+form with checkboxes and dropdowns, and get a concrete, reviewable setup.</p>
+<h2 id="decision">Decision</h2>
+<p>Add a first-run <strong>Setup</strong> surface at <code>/setup</code>. When the local project index is empty, the CLI opens
+the browser on <code>/setup</code> instead of <code>/</code>. Setup can always be reopened from Settings.</p>
+<p>Two input modes produce the same <code>SetupRequest</code>:</p>
+<ul>
+<li><strong>guided</strong>: name, root path, repository rows, language checkboxes, plugin checkboxes, trust mode;</li>
+<li><strong>chat</strong>: free text, optionally with a path; parsed by a <code>SetupPort</code> adapter.</li>
+</ul>
+<p><code>SetupPort</code> is a new typed port in <code>fluid-core</code>, next to <code>AgentPort</code> and <code>NarrativePort</code>. It returns a
+<code>SetupProposal</code>, never a write. The proposal is validated JSON:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>SetupProposal {</span></span>
+<span class="line"><span>  source: 'deterministic' | 'llm' | 'mixed',</span></span>
+<span class="line"><span>  project: { name, root },</span></span>
+<span class="line"><span>  repos: [{ repoKey, path, languages: string[] }],</span></span>
+<span class="line"><span>  plugins: [{ id, enabled, reason }],</span></span>
+<span class="line"><span>  trust: 'propose' | 'edit' | 'auto',</span></span>
+<span class="line"><span>  taskProvider?: 'local' | 'github' | 'gitlab',</span></span>
+<span class="line"><span>  questions: string[],</span></span>
+<span class="line"><span>  warnings: string[]</span></span>
+<span class="line"><span>}</span></span></code></pre>
+<p>The deterministic adapter scans the given directory (<code>.git</code>, <code>package.json</code>, <code>tsconfig.json</code>,
+<code>pom.xml</code>, <code>*.tonel</code>, README) and the plugin registry, then proposes repos, languages and plugins.
+It works offline and is the default. An LLM adapter may enrich the same proposal by extracting the
+project name, path and intent from chat; its output is validated with zod/serde and merged with the
+deterministic result. As with narrative, <strong>the LLM is enrichment, never evidence</strong>: a missing or
+invalid LLM response must not block setup.</p>
+<p>Applying a proposal is explicit: <code>POST /api/setup/apply</code> writes <code>.fluid-coding/project.json</code>, updates
+<code>~/.fluid-coding/projects.json</code> and activates the project. Defaults stay <code>trust: propose</code>, and setup
+never writes source files. A proposal that asks for <code>workspace:write</code>, <code>network:out</code> or
+<code>process:spawn</code> permissions lists them in the review step and requires a separate checkbox.</p>
+<p>Safety rules:</p>
+<ul>
+<li>a path from chat is treated as untrusted text: it must resolve to an existing directory;</li>
+<li>the LLM never receives shell execution and never supplies raw file content;</li>
+<li><code>questions</code> and <code>warnings</code> are surfaced in the UI, not silently resolved;</li>
+<li>plugin ids in a proposal are checked against the registry, so a hallucinated plugin is rejected;</li>
+<li>a failed apply leaves the previous project index untouched (write to a temp file, then replace).</li>
+</ul>
+<p>The setup UI follows the plugin-first rule: it renders manifests from the registry and does not
+hard-code a list of plugins or languages. The guided form and the chat are two front doors to the
+same proposal and review component.</p>
+<h2 id="consequences">Consequences</h2>
+<ul>
+<li>Testers can go from a fresh app to an active project in one screen.</li>
+<li>Multi-repo projects are described at setup time, so ADR-0014 lanes are populated from the start.</li>
+<li>Plugin discovery and setup hints come from the registry; no ad-hoc plugin list in the UI.</li>
+<li>LLM output is optional and validated, keeping the local-first, offline-capable contract intact.</li>
+<li>The CLI needs to choose the startup route from the project index; a projectless launch opens <code>/setup</code>.</li>
+<li>First-run setup is a separate port with its own contract tests, not an ad-hoc route handler.</li>
+</ul>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/decisions/ADR-0015-first-run-project-setup.md">docs/decisions/ADR-0015-first-run-project-setup.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — the understanding and review surface for agent-driven coding.</span><span>Local-first · Rust core · static site</span></div></footer></body></html>

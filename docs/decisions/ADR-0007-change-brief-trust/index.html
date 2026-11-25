@@ -1,0 +1,23 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ADR-0007 — Change Briefs and explicit trust modes · fluid-coding</title><meta name="description" content="- Status: accepted"><meta property="og:title" content="ADR-0007 — Change Briefs and explicit trust modes · fluid-coding"><meta property="og:description" content="- Status: accepted"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.D9k93Xz8.css"></head><body><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Home</a><a class="nav-link" href="/fluid-coding-site/demo/">Demo</a><a class="nav-link active" href="/fluid-coding-site/docs/">Docs</a><a class="nav-link" href="https://github.com/badetitou/fluid-coding">GitHub</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> ADR-0007 — Change Briefs and explicit trust modes</nav><article class="prose"><h1 id="adr-0007--change-briefs-and-explicit-trust-modes">ADR-0007 — Change Briefs and explicit trust modes</h1>
+<ul>
+<li>Status: accepted</li>
+<li>Date: 2026-11-24</li>
+</ul>
+<h2 id="context">Context</h2>
+<p>Agent edits are hard to review because a diff shows text, not architecture. Users need to see what a
+change touches structurally, which tags and rules it affects, and what checks say. They also need a
+predictable safety model for agent writes.</p>
+<h2 id="decision">Decision</h2>
+<p>Every agent turn produces a <strong>Change Brief</strong>: files and hunks, changed/added/removed symbols, changed
+and impacted cells by distance, relation changes, tags touched/proposed/orphaned, checks, transparent
+risk factors, and optional intent/narrative. Facts are generated deterministically; the LLM narrative
+is optional and clearly separated.</p>
+<p>Trust modes: <code>review</code> (read-only), <code>propose</code> (isolated worktree, patch proposal), <code>edit</code> (direct edit
+with checkpoints and undo), <code>auto</code> (edit + run checks). Default is <code>propose</code> for risky tasks.</p>
+<h2 id="consequences">Consequences</h2>
+<ul>
+<li>Review is possible without trusting a model’s summary.</li>
+<li>Every write path must create a checkpoint and an audit entry.</li>
+<li>UI actions map to a mode; the mode is never implicit.</li>
+</ul>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/decisions/ADR-0007-change-brief-trust.md">docs/decisions/ADR-0007-change-brief-trust.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — the understanding and review surface for agent-driven coding.</span><span>Local-first · Rust core · static site</span></div></footer></body></html>

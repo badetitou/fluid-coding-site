@@ -1,0 +1,21 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ADR-0008 — Typed plugin kinds, SDK and sandboxing · fluid-coding</title><meta name="description" content="- Status: accepted"><meta property="og:title" content="ADR-0008 — Typed plugin kinds, SDK and sandboxing · fluid-coding"><meta property="og:description" content="- Status: accepted"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.D9k93Xz8.css"></head><body><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Home</a><a class="nav-link" href="/fluid-coding-site/demo/">Demo</a><a class="nav-link active" href="/fluid-coding-site/docs/">Docs</a><a class="nav-link" href="https://github.com/badetitou/fluid-coding">GitHub</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> ADR-0008 — Typed plugin kinds, SDK and sandboxing</nav><article class="prose"><h1 id="adr-0008--typed-plugin-kinds-sdk-and-sandboxing">ADR-0008 — Typed plugin kinds, SDK and sandboxing</h1>
+<ul>
+<li>Status: accepted</li>
+<li>Date: 2026-11-24</li>
+</ul>
+<h2 id="context">Context</h2>
+<p>fluid already has themes, widgets, view builders, source providers, page actions and graph decorators.
+fluid-coding needs code analyzers, checks, agent providers, workspace providers, change presenters, tag
+kinds and language providers. A loose “plugin” interface would make quality and security impossible.</p>
+<h2 id="decision">Decision</h2>
+<p>Define explicit <strong>plugin kinds</strong> with typed contracts, manifest versioning and contract tests. First
+party collections ship as plugins (<code>fluid-code-map</code>, <code>fluid-review</code>, <code>fluid-tags</code>, <code>fluid-agents</code>,
+<code>fluid-code-graph</code>, <code>fluid-pharo</code>). Third-party analyzers run in a sandbox (WASM component or worker),
+and agent providers require explicit consent and credentials isolation.</p>
+<h2 id="consequences">Consequences</h2>
+<ul>
+<li>The plugin manifest is a versioned contract, not an arbitrary module.</li>
+<li>A broken plugin must fail in isolation, never take down the workbench.</li>
+<li>New plugin kinds require an ADR or a contract proposal, tests and docs.</li>
+</ul>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/decisions/ADR-0008-plugin-kinds.md">docs/decisions/ADR-0008-plugin-kinds.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — the understanding and review surface for agent-driven coding.</span><span>Local-first · Rust core · static site</span></div></footer></body></html>

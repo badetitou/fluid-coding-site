@@ -1,0 +1,50 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ADR-0012 — First POC includes editing, adapters, Monaco/LSP, more languages and LLM narrative · fluid-coding</title><meta name="description" content="- Status: accepted"><meta property="og:title" content="ADR-0012 — First POC includes editing, adapters, Monaco/LSP, more languages and LLM narrative · fluid-coding"><meta property="og:description" content="- Status: accepted"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.D9k93Xz8.css"></head><body><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Home</a><a class="nav-link" href="/fluid-coding-site/demo/">Demo</a><a class="nav-link active" href="/fluid-coding-site/docs/">Docs</a><a class="nav-link" href="https://github.com/badetitou/fluid-coding">GitHub</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> ADR-0012 — First POC includes editing, adapters, Monaco/LSP, more languages and LLM narrative</nav><article class="prose"><h1 id="adr-0012--first-poc-includes-editing-adapters-monacolsp-more-languages-and-llm-narrative">ADR-0012 — First POC includes editing, adapters, Monaco/LSP, more languages and LLM narrative</h1>
+<ul>
+<li>Status: accepted</li>
+<li>Date: 2026-11-25</li>
+<li>Deciders: Benoit</li>
+<li>Supersedes: the “understand + review first” sequencing in earlier planning notes</li>
+</ul>
+<h2 id="context">Context</h2>
+<p>The first plan made chat-driven editing, non-MCP agent adapters, Monaco/LSP, Java/Pharo providers and
+LLM narrative later phases. That would produce a read-only viewer, not something the maintainer can
+dogfood: the point of the second shell is to run a task, hand it to a real agent, review the patch,
+check it and continue in the same place. The local installable app makes this loop testable every day.</p>
+<h2 id="decision">Decision</h2>
+<p>The <strong>first POC</strong> must demonstrate the whole loop, with narrow but real slices:</p>
+<ol>
+<li><strong>Chat-driven code editing.</strong> A chat turn can produce a patch proposal; the user reviews hunks,
+applies them, and can restore a checkpoint. Default trust mode is <code>propose</code>; <code>edit</code>/<code>auto</code> stay
+explicit and checkpoint every write (ADR-0007).</li>
+<li><strong>Agent adapters behind <code>AgentPort</code>.</strong> MCP stays the read-tool substrate. opencode and Claude Code
+adapters are first-class implementations behind the same port, with a fake adapter for tests.</li>
+<li><strong>Monaco/LSP editing.</strong> The code surface is a real editor with LSP-style navigation; “Open in VS
+Code” remains the escape hatch. Monaco is loaded lazily so the initial shell stays FAF.</li>
+<li><strong>Language providers.</strong> TypeScript/JavaScript are the first-class static providers; Java and
+Pharo (Tonel static first, live via MCP where available) ship in the POC with the same provider
+contract.</li>
+<li><strong>LLM narrative as enrichment.</strong> Every brief/Change Brief is complete and deterministic without a
+model. An optional LLM turn adds a short narrative, clearly separated from facts and never used
+as evidence.</li>
+</ol>
+<p>The installable local app (Rust binary + macOS <code>.app</code>, embedded web, fluid-derived logo) is the
+delivery vehicle for this POC.</p>
+<h2 id="consequences">Consequences</h2>
+<ul>
+<li>The POC is larger than a viewer; work is split into independently reviewable vertical slices so
+no single change blocks dogfooding.</li>
+<li><code>AgentPort</code>, patch/checkpoint types and the provider contract become POC contracts, not future
+placeholders.</li>
+<li>Every write path needs checkpoints and audit entries from day one; there is no “temporary”
+unguarded edit path.</li>
+<li>LLM output is optional, attributable and never a source of truth for graph, impact or checks.</li>
+</ul>
+<h2 id="alternatives-considered">Alternatives considered</h2>
+<ul>
+<li><strong>Keep the POC read-only.</strong> Rejected: cannot dogfood the editing loop.</li>
+<li><strong>Build each capability in isolation and integrate later.</strong> Rejected: integration risk lands at the
+end; slices must be end-to-end.</li>
+<li><strong>Make the LLM the editor.</strong> Rejected: patches come through reviewable tool/port boundaries; the
+model can propose, not silently write.</li>
+</ul>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/decisions/ADR-0012-poc-scope.md">docs/decisions/ADR-0012-poc-scope.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — the understanding and review surface for agent-driven coding.</span><span>Local-first · Rust core · static site</span></div></footer></body></html>
