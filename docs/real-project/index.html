@@ -1,8 +1,8 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Working with a real project · fluid-coding</title><meta name="description" content="fluid-index is the filesystem/git adapter that turns a configured project into the same graph,"><meta property="og:title" content="Working with a real project · fluid-coding"><meta property="og:description" content="fluid-index is the filesystem/git adapter that turns a configured project into the same graph,"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> Working with a real project</nav><article class="prose"><h1 id="working-with-a-real-project">Working with a real project</h1>
 <p><code>fluid-index</code> is the filesystem/git adapter that turns a configured project into the same graph,
-matrix, changes, tags and tasks the UI already renders. It replaces the mocks in
-<code>crates/fluid-server/fixtures/demo.json</code>; the server switch itself is a one-line change described
-below.</p>
+matrix, changes, tags and tasks the UI already renders. <code>AppState</code> uses it whenever a project is
+configured; with no configured project it still loads <code>crates/fluid-server/fixtures/demo.json</code> so
+first run, tests and smoke checks have a workspace.</p>
 <h2 id="configure-a-project">Configure a project</h2>
 <p>Use <strong>Settings → Setup</strong> on first run (see <a href="/fluid-coding-site/docs/setup/">setup.md</a>), or write the definition yourself
 at <code>&lt;project-root&gt;/.fluid-coding/project.json</code>:</p>
@@ -32,15 +32,15 @@ can name a provider id or a language, with an optional <code>-native</code>/<cod
 on disk: entities from TS/JS/Java/Pharo providers, cell assignments from real directories, changed
 files from <code>git status --porcelain</code>, tags from <code>.fluid/tags/*.json</code> and tasks from
 <code>.claude/issues/*.md</code>. <code>warnings</code> in the response explains anything skipped.</p>
-<h3 id="integration-hook">Integration hook</h3>
-<p><code>AppState::try_new_with_registry</code> currently calls <code>demo::load()</code>. Replace it with the active project:</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="rust"><code><span class="line"><span style="color:#F97583">let</span><span style="color:#E1E4E8"> project </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> registry</span><span style="color:#F97583">.</span><span style="color:#B392F0">active</span><span style="color:#E1E4E8">()</span><span style="color:#F97583">.</span><span style="color:#B392F0">ok_or_else</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">||</span><span style="color:#6A737D"> /* typed registry error */</span><span style="color:#E1E4E8">)</span><span style="color:#F97583">?</span><span style="color:#E1E4E8">;</span></span>
-<span class="line"><span style="color:#F97583">let</span><span style="color:#E1E4E8"> data </span><span style="color:#F97583">=</span><span style="color:#B392F0"> fluid_index</span><span style="color:#F97583">::</span><span style="color:#B392F0">load</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&amp;</span><span style="color:#E1E4E8">project)</span><span style="color:#F97583">.</span><span style="color:#B392F0">map_err</span><span style="color:#E1E4E8">(</span><span style="color:#B392F0">serde</span><span style="color:#F97583">::</span><span style="color:#B392F0">ser</span><span style="color:#F97583">::</span><span style="color:#B392F0">Error</span><span style="color:#F97583">::</span><span style="color:#E1E4E8">custom)</span><span style="color:#F97583">?</span><span style="color:#E1E4E8">;</span></span>
-<span class="line"><span style="color:#F97583">let</span><span style="color:#E1E4E8"> demo </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> data</span><span style="color:#F97583">.</span><span style="color:#B392F0">into_demo_fields</span><span style="color:#E1E4E8">();</span></span></code></pre>
-<p><code>DemoFields</code> has the exact <code>demo::Demo</code> field names: <code>graph</code>, <code>spec</code>, <code>changed.files</code>,
-<code>changed.symbols</code>, <code>tags</code>, <code>tasks</code>, plus <code>generation</code> (<code>real:&lt;project.id&gt;</code>) and <code>warnings</code>. The
-existing <code>build_matrix</code>, <code>analyze_impact</code>, <code>TagIndex::from_tags</code> and <code>TaskStore::from_tasks</code> calls
-keep working unchanged. <code>crates/fluid-server/Cargo.toml</code> already declares the path dependency.</p>
+<h3 id="how-the-switch-works">How the switch works</h3>
+<p><code>ProjectRegistry::is_configured()</code> distinguishes a real manifest/index from the synthetic demo
+project. When it is true, <code>AppState</code> calls <code>fluid_index::load(registry.active())</code> and converts the
+result through <code>DemoFields</code>; otherwise it converts the demo fixture the same way. Both paths then
+feed the existing <code>build_matrix</code>, <code>analyze_impact</code>, <code>TagIndex::from_tags</code> and <code>TaskStore::from_tasks</code>
+calls unchanged.</p>
+<p><code>GET /api/health</code> exposes <code>dataSource</code> (<code>real</code> or <code>demo</code>), <code>generation</code> (<code>real:&lt;project.id&gt;</code> for a
+configured project), <code>projectId</code> and the indexer <code>warnings</code>. The status bar shows that source and
+the warning count, so a mock run is never mistaken for work on real code.</p>
 <h2 id="use-a-real-agent-and-a-trustcheckpoint-flow">Use a real agent and a trust/checkpoint flow</h2>
 <p>Agents connect through <code>AgentPort</code> (<code>fake</code>, <code>opencode</code>, <code>claude-code</code>) and the same MCP tools; there
 is no private tool loop. Open a task brief, ask the agent for a change, review the proposed hunks,
