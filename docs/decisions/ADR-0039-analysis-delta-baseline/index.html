@@ -1,0 +1,74 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ADR-0039 — Analysis delta compares the change with its merge target · fluid-coding</title><meta name="description" content="- Status: proposed"><meta property="og:title" content="ADR-0039 — Analysis delta compares the change with its merge target · fluid-coding"><meta property="og:description" content="- Status: proposed"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> ADR-0039 — Analysis delta compares the change with its merge target</nav><article class="prose"><h1 id="adr-0039--analysis-delta-compares-the-change-with-its-merge-target">ADR-0039 — Analysis delta compares the change with its merge target</h1>
+<ul>
+<li>Status: proposed</li>
+<li>Date: 2026-11-26</li>
+<li>Deciders: Benoit</li>
+</ul>
+<h2 id="context">Context</h2>
+<p>The Structure page (“The shape of the change”) already shows the current <code>ModelAnalysis</code>: cycles,
+self-calls, isolated entities, degrees and relation counts. Those are absolute numbers. The user
+asked for the delta of the change: did this work add cycles, isolated classes or relations?</p>
+<p>A delta needs a reference. The interesting reference for a branch that wants to be merged is the
+branch it targets in an open PR/MR, not necessarily <code>main</code> and not the current <code>HEAD</code>. The forge
+adapters already expose <code>ForgeReviewSummary.source_branch</code> and <code>target_branch</code> for connected
+GitHub/GitLab accounts, but the analysis route did not use them. The app has no account-per-repo
+binding yet, and a forge lookup can fail or be slow; no number may be invented in that case.</p>
+<h2 id="decision">Decision</h2>
+<ol>
+<li><code>GET /api/model/analysis</code> returns the existing <code>ModelAnalysis</code> plus <code>baseline</code> and <code>delta</code>.
+<code>baseline</code> is <code>{ source: 'review' | 'head' | 'none', ref: string | null, note: string | null }</code>;
+<code>delta</code> holds signed integers for cycles, cyclic entities, self-calls, isolated entities,
+entities and relations. <code>delta</code> is <code>null</code> when no baseline could be inspected.</li>
+<li>Baseline selection happens on the server, once per index generation:
+<ul>
+<li>current local branch → open PR/MR target branch from the connected forges (3 s timeout,
+deterministic choice when several reviews match);</li>
+<li>otherwise <code>HEAD</code>;</li>
+<li>otherwise <code>none</code>, with the reason in <code>baseline.note</code>.
+A review ref is resolved through <code>origin/&lt;target&gt;</code> before the local branch so a stale local
+branch cannot stand in for the merge target.</li>
+</ul>
+</li>
+<li><code>fluid-index::analyze_baseline</code> exports the tracked tree of that commit with <code>git archive</code> into
+a temporary directory, indexes it with the same plugins and runs the same <code>model-analysis</code>
+engine as the live graph. No git worktree is added and the user’s checkout is never modified.
+Unsafe refs, missing git, failed archive/extraction and unresolvable refs are typed errors; the
+route then falls back to <code>HEAD</code> or to a <code>none</code> baseline.</li>
+<li>The browser only formats the signed counters. It never builds a second graph or recomputes a
+count. The wire contract is validated by zod (<code>modelAnalysisResponseSchema</code>) and by the shared
+fixture on both sides.</li>
+<li>Baseline resolution and indexing are cached in the workspace snapshot alongside the current
+analysis, so opening the section or re-rendering it costs at most one forge lookup and one
+baseline index per generation.</li>
+</ol>
+<h2 id="consequences">Consequences</h2>
+<p>Positive:</p>
+<ul>
+<li>The Structure Analysis section answers “what did this change add?” for a real PR/MR target, and
+remains honest when there is no forge review, no git or no readable baseline.</li>
+<li>The delta uses the same canonical engine as the absolute numbers, so cycles and isolated
+entities are comparable by construction.</li>
+<li>The checkout and the forge tokens stay untouched; only a branch name and a ref reach the client.</li>
+</ul>
+<p>Negative:</p>
+<ul>
+<li>A baseline costs a second git archive, extraction and index, off the async runtime and only on
+first Analysis open. The 100k LOC p95 budget still has no measured baseline (ADR-0033); this
+path must be included when that bench lands.</li>
+<li>Several connected forge accounts may be queried because the project has no account-per-repo
+binding. The lookup is time-boxed and cached; a branch-name collision across accounts is
+resolved deterministically but may not be the project’s own PR.</li>
+<li>A stale remote tracking ref can differ from the live forge target until the next fetch. The
+response names the ref but not the target commit.</li>
+</ul>
+<h2 id="alternatives-considered">Alternatives considered</h2>
+<ul>
+<li><strong>Snapshot the previous analysis locally.</strong> Rejected: no baseline exists before the first open
+and it would compare sessions, not the change being reviewed.</li>
+<li><strong>Use <code>git diff HEAD</code> only.</strong> Rejected: it ignores commits already pushed to a PR/MR branch.</li>
+<li><strong>Index the baseline with a git worktree.</strong> Rejected: it mutates <code>.git/worktrees</code> for a read-only
+question and needs cleanup on failure; <code>git archive</code> is read-only.</li>
+<li><strong>Resolve the PR target in React.</strong> Rejected by AGENTS.md: domain decisions stay
+behind the Rust server and the typed port; the client only renders.</li>
+</ul>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/decisions/ADR-0039-analysis-delta-baseline.md">docs/decisions/ADR-0039-analysis-delta-baseline.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — a local workbench for reviewing agent-written code.</span><nav class="footer-links" aria-label="Footer navigation"><a class="footer-docs" href="/fluid-coding-site/docs/">Documentation</a><a href="https://github.com/badetitou/fluid-coding">GitHub ↗</a></nav></div></footer></body></html>

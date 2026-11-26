@@ -88,7 +88,8 @@ this ADR is accepted.</p>
 <h2 id="what-can-ship-before-acceptance">What can ship before acceptance</h2>
 <ul>
 <li><code>GET /api/model/analysis</code> (cycles, <code>cyclicEntities</code>, entity propagation, degrees, unused), its
-zod contract and shared fixture, and the Structure “Analysis” section. This only exposes the
+zod contract and shared fixture, the Structure “Analysis” section, and the compact Home “Model
+health” projection served by <code>/api/now</code> from the same per-generation cache. This only exposes the
 existing bridge; it does not change which engine serves <code>/api/impact</code>.</li>
 <li><code>.fluid/matrix.json</code> reading and the repo’s own file (test: fluid-coding has more than 4 cells).</li>
 <li>A criterion bench for <code>analyze_impact</code> and for the bridge on the same graph, to record the

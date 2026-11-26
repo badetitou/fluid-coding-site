@@ -37,7 +37,12 @@ same graph are byte-for-byte identical. <code>ModelAnalysis</code> carries <code
 edges produce many false self-calls), <code>propagation</code> (<code>key</code>, <code>distance</code>, <code>direction</code>), <code>degrees</code>
 (top fan-in + fan-out rows), <code>unused</code> / <code>unusedCount</code> (isolated source entities, capped),
 <code>entityCount</code>, <code>relationCount</code> and <code>warnings</code>. <code>GET /api/model/analysis</code> serves it with the
-index <code>generation</code>, computed once per generation.</p>
+index <code>generation</code>, computed once per generation. It also serves <code>baseline</code> and a signed <code>delta</code>
+(ADR-0039): the current counters minus the same counters of a baseline tree. The baseline is the
+target branch of an open PR/MR for the current branch, otherwise <code>HEAD</code>; <code>fluid-index</code> exports that
+commit with <code>git archive</code> into a temporary directory, indexes it with the same plugins and runs the
+same engine. When no baseline can be inspected, <code>delta</code> is <code>null</code> and <code>baseline.note</code> says why. The
+browser only formats those numbers.</p>
 <p>Seeds come from the changed symbols supplied by the caller (<code>Changed::symbols</code> or
 <code>ImpactRequest::changed_symbols</code>). <code>CodeGraph</code> itself has no change set, so <code>analyze</code> and
 <code>analyze_with_depth</code> use the documented fallback: entities with no parent. Unknown seed keys are

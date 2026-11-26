@@ -1,6 +1,7 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Home (&quot;Now&quot;) — page spec · fluid-coding</title><meta name="description" content="Status: draft for validation (W8). Mockup: home-now-mockup.html — open it in a"><meta property="og:title" content="Home (&quot;Now&quot;) — page spec · fluid-coding"><meta property="og:description" content="Status: draft for validation (W8). Mockup: home-now-mockup.html — open it in a"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> Home (&quot;Now&quot;) — page spec</nav><article class="prose"><h1 id="home-now--page-spec">Home (“Now”) — page spec</h1>
-<p>Status: draft for validation (W8). Mockup: <a href="./home-now-mockup.html"><code>home-now-mockup.html</code></a> — open it in a
-browser, resize to 375 px, toggle the OS light/dark setting.</p>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Home (&quot;Now&quot;) — page spec · fluid-coding</title><meta name="description" content="Status: implemented; the still-deferred fields are listed below. Mockup:"><meta property="og:title" content="Home (&quot;Now&quot;) — page spec · fluid-coding"><meta property="og:description" content="Status: implemented; the still-deferred fields are listed below. Mockup:"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> Home (&quot;Now&quot;) — page spec</nav><article class="prose"><h1 id="home-now--page-spec">Home (“Now”) — page spec</h1>
+<p>Status: implemented; the still-deferred fields are listed below. Mockup:
+<a href="./home-now-mockup.html"><code>home-now-mockup.html</code></a> — open it in a browser, resize to 375 px, toggle the
+OS light/dark setting.</p>
 <h2 id="purpose">Purpose</h2>
 <p>Home answers four questions in this order: <em>what is an agent doing right now, what am I working on,
 what comes next, what waits for my review.</em> The current page (<code>apps/web/src/pages/NowPage.tsx</code>) is a
@@ -66,8 +67,8 @@ server source that fills it, read once per request.</p>
 </tr>
 <tr>
 <td><code>modelHealth</code></td>
-<td>index / task-parse warnings are served as <code>warnings</code> (startup snapshot, not refreshed on project switch). Cycles and impacted cells are <strong>deferred</strong> to W5</td>
-<td>warnings only</td>
+<td>compact projection of the cached Model analysis (the same cache as <code>/api/model/analysis</code>) plus the cached cell impact from <code>/api/impact</code>; index / task-parse warnings stay in the separate <code>warnings</code> queue and are replaced on project switch</td>
+<td>yes</td>
 </tr>
 </tbody>
 </table>
@@ -118,9 +119,16 @@ tasks <code>in_review</code>, orphaned tags. Link “Review →” to <code>/tag
 </ul>
 <h3 id="6-model-health-collapsed-by-default">6. Model health (collapsed by default)</h3>
 <ul>
-<li>Collapsed summary line: <code>0 cycles · 2 impacted cells · 1 warning</code>, warning tone if any warning.</li>
-<li>Expanded: cycle list, impacted cells, indexing / task-parse warnings (e.g.
-<code>unknown task status 'parked' in .claude/issues/1-demo-videos.md</code>).</li>
+<li>Collapsed summary line: <code>0 cycles · 2 impacted cells · 1 warning</code>; warning tone when a cycle or a
+warning exists. Counts are the server’s full counts, never truncated to the shown rows.</li>
+<li>Expanded: cycle list (entity names, with the name-resolution caveat), impacted cells with their
+cell distance, Model-engine warnings, then indexing / task-parse warnings (e.g.
+<code>unknown task status 'parked' in .claude/issues/1-demo-videos.md</code>). A link opens the full analysis
+on Structure.</li>
+<li>The entity-level Model analysis and the cell-level impact are kept separate (ADR-0033): the card
+shows both counts, but never presents entity hops as impacted cells.</li>
+<li>If the analysis source fails, the card says so and still shows the index / task warnings; the rest
+of <code>/api/now</code> is unaffected.</li>
 <li>Open/closed state is a per-viewer preference (localStorage), not repository state.</li>
 </ul>
 <h3 id="header">Header</h3>
@@ -143,10 +151,8 @@ after Start work / Apply. No polling faster than 10 s.</li>
 <li><strong>Until W2 (task persistence + status vocabulary):</strong> <code>nextTask</code> ordering by priority, <strong>Mark in
 review</strong>, a <code>parked</code>/<code>blocked</code> status. <code>currentTask</code>, <code>nextTask</code> and the <code>in_review</code> queue are served
 now: they only use <code>todo</code>, <code>in_progress</code> and <code>in_review</code>, which survive ADR-0032.</li>
-<li><strong>Until W5 (model bridge served):</strong> cycles and impacted cells in Model health. Until then the card
-shows warnings only and says “cycle analysis not available yet”.</li>
 <li><strong>Not served yet:</strong> <code>currentTask.changedFiles</code>, <code>currentTask.lastCheckpoint</code>, <code>toReview.checks</code>,
-<code>modelHealth</code> cycles / impacted cells, orphaned tags.</li>
+orphaned tags.</li>
 <li>Worktree-scoped checks: shown when the checks runner accepts a root; until then the card says
 “checks: main checkout”.</li>
 </ul>

@@ -1,6 +1,8 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Home — task composer bar · fluid-coding</title><meta name="description" content="Status: revision 2, after the first adversarial review (REJECT, 15 findings — all addressed below)."><meta property="og:title" content="Home — task composer bar · fluid-coding"><meta property="og:description" content="Status: revision 2, after the first adversarial review (REJECT, 15 findings — all addressed below)."><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> Home — task composer bar</nav><article class="prose"><h1 id="home--task-composer-bar">Home — task composer bar</h1>
-<p>Status: revision 2, after the first adversarial review (REJECT, 15 findings — all addressed below).
-Extends <a href="/fluid-coding-site/docs/design/home-now/"><code>home-now.md</code></a>. Decision record: <a href="/fluid-coding-site/docs/decisions/ADR-0035-task-intake-chat/">ADR-0035</a>.</p>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Home — task composer bar · fluid-coding</title><meta name="description" content="Status: revision 3, after the first adversarial review (REJECT, 15 findings — addressed below) and the"><meta property="og:title" content="Home — task composer bar · fluid-coding"><meta property="og:description" content="Status: revision 3, after the first adversarial review (REJECT, 15 findings — addressed below) and the"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> Home — task composer bar</nav><article class="prose"><h1 id="home--task-composer-bar">Home — task composer bar</h1>
+<p>Status: revision 3, after the first adversarial review (REJECT, 15 findings — addressed below) and the
+shared chat field change. Extends <a href="/fluid-coding-site/docs/design/home-now/"><code>home-now.md</code></a>. Decision records:
+<a href="/fluid-coding-site/docs/decisions/ADR-0035-task-intake-chat/">ADR-0035</a>,
+<a href="/fluid-coding-site/docs/decisions/ADR-0038-shared-chat-field/">ADR-0038</a>.</p>
 <h2 id="purpose">Purpose</h2>
 <p>Home becomes the fastest place to create a task for the active project. A full-width bar, shaped like
 the agent dock’s composer, takes one sentence. The Fluid Agent asks follow-ups if needed and proposes a
@@ -16,11 +18,15 @@ early return, so typed text survives the first <code>/api/now</code> response.</
 </ul>
 <h2 id="look">Look</h2>
 <ul>
-<li>Same shell as the dock composer (bordered panel, textarea, round send button, mono status line),
-using a Home class <code>home-composer-bar</code> with <code>margin: 0</code> so it aligns with the grid, not the dock’s
-12 px margin.</li>
-<li>No mode tabs. Two rows of textarea by default.</li>
-<li>Status line: <code>Creates in &lt;project&gt; · ⌘ Enter</code>.</li>
+<li><strong>The same chat field as the dock</strong> (<code>ChatField</code>): <code>›</code> prompt line, two-row textarea, a context chip,
+a gear popover and chips for trust mode, provider and model, in the same order. No chat shell:
+no header, tabs, history or <strong>New conversation</strong> button on Home.</li>
+<li>Provider and model chips write the same machine-level General settings as the dock and Settings →
+General. Mode is fixed to <code>propose</code> and disabled: the intake endpoint does not accept a trust mode.
+The context chip is disabled too: the endpoint sends no files. Both keep a title explaining why.</li>
+<li>The gear popover shows the active command, an intake note and the link to Settings; the dock’s copy
+adds its issue input.</li>
+<li>Status chip: <code>Creates in &lt;project&gt; · ⌘ Enter</code>; the send button title repeats the shortcut.</li>
 <li>Placeholder: “Describe a task for this project…”.</li>
 <li>Phone width (375 px): full width with the page gutter; the draft card stacks its buttons.</li>
 </ul>
@@ -101,7 +107,8 @@ missing sub-tasks on the Board. This is the trade-off to confirm.</p>
 <h2 id="interaction">Interaction</h2>
 <ul>
 <li><strong>Send</strong>: the send button or ⌘/Ctrl + Enter (same as the dock). A plain Enter inserts a newline.</li>
-<li><strong>Reply</strong>: the last 6 turns show above the bar in an <code>aria-live="polite"</code> log.</li>
+<li><strong>Reply</strong>: the last 6 turns show above the bar in the <code>aria-live="polite"</code> log; changing provider or
+model mid-conversation does not change the state machine.</li>
 <li><strong>Draft card</strong> (<code>section</code> “Proposed task”): title, first 3 non-empty body lines, first 5 sub-tasks
 then “+N more”, the line “Target: resolved on create (connected forge, else local board)” (the
 intake reply does not carry the resolved target, so the card says the rule, not a value), and two
@@ -139,12 +146,28 @@ parent is no longer invisible. The composer calls <code>onCreated</code> (refetc
 </thead>
 <tbody>
 <tr>
+<td><code>components/agent/ChatField.tsx</code></td>
+<td>shared prompt line, popovers, chips and send. Props: <code>view</code>, <code>actions</code>, <code>controls</code>, <code>details</code></td>
+</tr>
+<tr>
+<td><code>components/agent/ChatComposer.tsx</code>, <code>AgentControls.tsx</code></td>
+<td>lower-level textarea/send and chip row used by <code>ChatField</code></td>
+</tr>
+<tr>
+<td><code>components/agent/AgentRunForm.tsx</code></td>
+<td>dock wiring of <code>ChatField</code> with issue input and run actions</td>
+</tr>
+<tr>
 <td><code>components/now/TaskComposer.tsx</code></td>
-<td>the bar: transcript, draft slot, error, textarea, send. Props: <code>controller</code>, <code>projectName</code></td>
+<td>Home wiring: transcript, draft slot, intake field. Props: <code>controller</code>, <code>projectName</code>, optional <code>chat</code> for tests</td>
 </tr>
 <tr>
 <td><code>components/now/TaskDraftCard.tsx</code></td>
 <td>draft preview with Discard / Create. Props: <code>draft</code>, <code>busy</code>, <code>onCreate</code>, <code>onDiscard</code></td>
+</tr>
+<tr>
+<td><code>hooks/useChatSettings.ts</code></td>
+<td>provider/model selection shared with the dock, backed by General settings</td>
 </tr>
 <tr>
 <td><code>pages/now/taskComposer.ts</code></td>
@@ -152,7 +175,7 @@ parent is no longer invisible. The composer calls <code>onCreated</code> (refetc
 </tr>
 <tr>
 <td><code>pages/now/useTaskComposer.ts</code></td>
-<td>effects: calls the API, dispatches results, owns the ref</td>
+<td>effects: calls the API, dispatches results</td>
 </tr>
 <tr>
 <td><code>lib/taskCreation.ts</code></td>
@@ -173,6 +196,16 @@ while creating.</p>
 <li>
 <p><code>lib/taskCreation.test.ts</code>: checklist body, child tasks for local, forge without children, parent
 failure passes through, sub-task failure carries the parent.</p>
+</li>
+<li>
+<p><code>components/agent/ChatField.test.tsx</code>: the shared field renders the prompt line, all chips and the
+status, and can disable the mode/context chips for intake.</p>
+</li>
+<li>
+<p><code>components/now/TaskComposer.test.tsx</code>: Home has the same field and labels but no chat-shell controls.</p>
+</li>
+<li>
+<p><code>components/agent/AgentControls.test.tsx</code>: intake status chip and disabled mode/context chips.</p>
 </li>
 <li>
 <p>Board wiring: covered by the existing <code>useTasksBoard</code> consumers and the helper test; no new hook test
@@ -202,14 +235,18 @@ failure passes through, sub-task failure carries the parent.</p>
 <li>Inline editing of the draft; use the Board form.</li>
 <li>Choosing a target on Home (<code>auto</code> only).</li>
 <li>Retrying only the failed sub-tasks.</li>
-<li>Transcript persistence across reloads (in memory only).</li>
+<li>Any conversation selection on Home: no tabs, no history, no <strong>New conversation</strong>; the dock owns
+durable sessions (ADR-0038).</li>
+<li>Changing trust mode or attaching files from Home: the intake endpoint fixes both, so those chips are
+visible but disabled.</li>
+<li>Changes tab with patches: the dock owns patch review.</li>
 <li>Starting work from the composer.</li>
 <li>Asking timeout (Discard is the escape).</li>
 </ul>
 <h2 id="open-points">Open points</h2>
 <ul>
-<li>Send key: ⌘/Ctrl + Enter, to match the dock. Plain Enter would be faster for one-liners; decided to
-keep one shortcut across both bars.</li>
+<li>Send key: ⌘/Ctrl + Enter, deliberately different from the dock’s Enter. The shared <code>ChatField</code> owns
+the look; each surface keeps its own key handler and status hint.</li>
 <li>Partial creation: drop the draft and report, versus retrying the missing sub-tasks. Chosen: report.</li>
 <li>Asking timeout: none in v1 (Discard only).</li>
 </ul>
