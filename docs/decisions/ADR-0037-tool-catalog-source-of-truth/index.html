@@ -1,0 +1,79 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ADR-0037 — The tool catalogue comes from the running server · fluid-coding</title><meta name="description" content="- Status: accepted"><meta property="og:title" content="ADR-0037 — The tool catalogue comes from the running server · fluid-coding"><meta property="og:description" content="- Status: accepted"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> ADR-0037 — The tool catalogue comes from the running server</nav><article class="prose"><h1 id="adr-0037--the-tool-catalogue-comes-from-the-running-server">ADR-0037 — The tool catalogue comes from the running server</h1>
+<ul>
+<li>Status: accepted</li>
+<li>Date: 2026-11-26</li>
+<li>Deciders: Benoit</li>
+<li>Depends on: ADR-0031 (fluid MCP tool server, proposed), ADR-0034 (generated contracts, proposed)</li>
+</ul>
+<h2 id="context">Context</h2>
+<p>The Agents screen showed eight tools from <code>apps/web/src/lib/agents.ts</code>, a hand-written list with no
+server behind it. <code>packages/contracts/src/mcp-tools.ts</code> declares eleven aspirational tools, including
+<code>cell_symbols</code> and <code>get_diff</code>, and no Rust code implements or serves them. There is no MCP server in
+<code>crates/</code> yet: the facts available to an agent are the loopback HTTP routes of <code>fluid-server</code>
+(<code>/api/matrix</code>, <code>/api/entity/{key}</code>, <code>/api/relations/{key}</code>, <code>/api/impact</code>, <code>/api/changes</code>,
+<code>/api/checks</code>, <code>/api/tags</code>, <code>/api/tasks*</code>, <code>/api/edits*</code>), plus real write routes for tags and patch
+proposals. A UI list that claims more than the server delivers is misinformation, and two hand-written
+lists will drift.</p>
+<p>ADR-0031 defines the future MCP registry and endpoint (<code>GET /api/agents/tools</code> with a <code>served</code> flag).
+That bridge does not exist; shipping its aspirational table now would repeat the same mistake under a
+different name.</p>
+<h2 id="decision">Decision</h2>
+<ol>
+<li>
+<p><strong>The catalogue is pure data in <code>fluid-core</code>.</strong> <code>crates/fluid-core/src/tools.rs</code> defines
+<code>ToolDescriptor { name, summary, access: read | write, params }</code> and a <code>const TOOL_CATALOG</code>
+containing only tools backed by a route registered in <code>fluid-server/src/routes/mod.rs</code>. <code>access</code>
+is <code>write</code> only where a real write route exists (<code>POST /api/tags</code>, <code>POST /api/edits/propose</code>);
+<code>propose_patch</code> explicitly does not apply the patch. No I/O, runtime or async code enters the core,
+which still builds for <code>wasm32-unknown-unknown</code>.</p>
+</li>
+<li>
+<p><strong>The server publishes that table.</strong> <code>GET /api/tools</code> serializes <code>Vec&lt;ToolDescriptor&gt;</code> in camelCase
+from <code>fluid-server/src/routes/tools.rs</code>. There is no <code>served</code> flag: by construction every entry is
+served today. When a route disappears, its descriptor goes with it.</p>
+</li>
+<li>
+<p><strong>The contract is mirrored and pinned by a shared fixture.</strong> <code>packages/contracts/src/tools.ts</code>
+holds the zod schema used to validate the untrusted HTTP response, with explicit TypeScript types.
+<code>fixtures/contracts/tools.json</code> is parsed by a Vitest test and compared byte-for-byte (as JSON
+values) with the Rust table in both the core and the route tests. Names stay unique, and the write
+set stays exactly the two routes above.</p>
+</li>
+<li>
+<p><strong>The web client fetches, never invents.</strong> <code>codingApi.tools()</code> calls <code>/api/tools</code> and parses it with
+zod; in mock mode, where no server exists, it honestly returns an empty list. A typed
+<code>useToolCatalog()</code> hook feeds the Agents screen, which shows a fetch error or an explicit empty
+state instead of a fallback catalogue. <code>apps/web/src/lib/agents.ts</code> is deleted, including its
+invented provider-status and trust-mode tables.</p>
+</li>
+<li>
+<p><strong>Aspirational schemas stay out of the UI.</strong> <code>mcp-tools.ts</code> keeps its input/output schemas for the
+future MCP bridge, but nothing renders them as available tools. Adding an entry there does not add
+an entry to <code>TOOL_CATALOG</code>; that requires a served route and this ADR’s fixture update.</p>
+</li>
+</ol>
+<h2 id="consequences">Consequences</h2>
+<p>Positive:</p>
+<ul>
+<li>Agents sees exactly what the current server can do; no offline or stale UI list can overclaim.</li>
+<li>One Rust-owned table feeds the HTTP response, the Rust tests and the TS fixture.</li>
+<li>Removing the hard-coded file also removes fabricated provider connectivity and trust labels.</li>
+</ul>
+<p>Negative:</p>
+<ul>
+<li>The catalogue is only as complete as the route-to-tool mapping; new routes do not automatically
+become tools, by design.</li>
+<li>The zod schema duplicates the Rust shape until ADR-0034’s generator is in place; the shared fixture
+and the <code>satisfies z.ZodType&lt;ToolDescriptor&gt;</code> check limit drift.</li>
+<li>When ADR-0031’s MCP bridge lands, the endpoint and <code>served</code> flag must be reconciled with this one;
+the registry data stays in <code>fluid-core</code>.</li>
+</ul>
+<h2 id="alternatives-considered">Alternatives considered</h2>
+<ul>
+<li><strong>Render <code>mcp-tools.ts</code> names in the Agents screen.</strong> Rejected: none is served by Rust today.</li>
+<li><strong>Add a <code>served</code> flag now and copy the aspirational list.</strong> Rejected: the UI would still present
+unavailable capabilities and two lists would need manual synchronisation.</li>
+<li><strong>Keep the web catalogue with a runtime capability probe per tool.</strong> Rejected: N+1 requests and a
+second, private definition of the server’s surface.</li>
+</ul>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/decisions/ADR-0037-tool-catalog-source-of-truth.md">docs/decisions/ADR-0037-tool-catalog-source-of-truth.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — a local workbench for reviewing agent-written code.</span><nav class="footer-links" aria-label="Footer navigation"><a class="footer-docs" href="/fluid-coding-site/docs/">Documentation</a><a href="https://github.com/badetitou/fluid-coding">GitHub ↗</a></nav></div></footer></body></html>

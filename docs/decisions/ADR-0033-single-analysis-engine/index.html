@@ -1,0 +1,131 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ADR-0033 — One analysis engine: the Model computes, fluid-core projects · fluid-coding</title><meta name="description" content="- Status: proposed"><meta property="og:title" content="ADR-0033 — One analysis engine: the Model computes, fluid-core projects · fluid-coding"><meta property="og:description" content="- Status: proposed"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> ADR-0033 — One analysis engine: the Model computes, fluid-core projects</nav><article class="prose"><h1 id="adr-0033--one-analysis-engine-the-model-computes-fluid-core-projects">ADR-0033 — One analysis engine: the Model computes, fluid-core projects</h1>
+<ul>
+<li>Status: proposed</li>
+<li>Date: 2026-11-26</li>
+<li>Deciders: Benoit</li>
+</ul>
+<h2 id="context">Context</h2>
+<p>Two graph engines live side by side and only one is wired:</p>
+<ul>
+<li><code>fluid-core::analyze_impact</code> (<code>crates/fluid-core/src/impact.rs</code>) is a cell-level BFS. It maps
+changed files and symbols to matrix cells through <code>CellIndex</code>, reverses every relation kind into
+cell → cell edges, and walks at most <code>max_depth</code> (3) <strong>cell hops</strong>. <code>AppState::load</code> runs it once
+per generation; <code>GET /api/impact</code> returns the cached <code>Impact</code> (<code>changedCells</code>,
+<code>impactedCells[{id, distance}]</code>). The web app (<code>serverWorkspace.ts</code>), the change brief and
+<code>fixtures/contracts/impact.json</code> all read that shape.</li>
+<li><code>fluid-index::model_bridge</code> (<code>analyze</code>, <code>analyze_with_depth</code>, <code>analyze_with_seeds</code>) freezes the
+<code>CodeGraph</code> into a <code>model_core::Model</code> and delegates cycles and propagation to <code>model-analysis</code>
+0.8 (crates.io, <code>model-core</code> + <code>serde</code> + <code>anyhow</code>, no I/O). Its propagation is <strong>entity-level</strong>,
+follows only <code>Calls</code> + <code>References</code>, and counts <strong>entity hops</strong>. It has no caller.
+<code>docs/architecture-model-bridge.md</code> already names <code>badetitou/model</code> the canonical engine.</li>
+</ul>
+<p><code>model-analysis</code> 0.8 also ships <code>Degree</code>, <code>Unused</code>, <code>Metrics</code> and <code>Quotient</code>, none exposed yet. The
+Home “Checks” card announces cycles that nothing computes.</p>
+<p><code>crates/fluid-wasm</code> exports <code>analyze_impact_json</code>, but no package or app imports <code>fluid-wasm</code>
+today: the browser receives impact only from the server.</p>
+<p>The matrix spec is not configurable. <code>fluid-index/src/matrix_spec.rs</code> reads no file: layers are the
+first directory under the repo (<code>src</code>, <code>apps</code>, <code>crates</code>, …) and domains are the repo name, which
+gives fluid-coding itself four cells. There is no <code>.fluid/</code> directory in the repository.</p>
+<h2 id="decision">Decision</h2>
+<ol>
+<li>
+<p><strong>The Model is the only graph-analysis engine.</strong> Cycles, degrees, unused entities and impact
+propagation run in <code>model-analysis</code>, called from <code>fluid-index</code> (the adapter layer). fluid-core
+keeps what is not graph analysis: <code>CodeGraph</code>, <code>MatrixSpec</code>/<code>CellIndex</code>, <code>build_matrix</code>, change
+briefs and the wire types <code>Impact</code>, <code>ImpactRequest</code>, <code>ImpactedCell</code>.</p>
+</li>
+<li>
+<p><strong><code>/api/impact</code> keeps its contract.</strong> Its shape and its cell-hop semantics stay as today. The
+index builds a second, cell-level <code>Model</code> (one entity per cell, one relation per distinct
+cell → cell dependency of any kind, as <code>reverse_cell_edges</code> does now) and runs
+<code>model_analysis::Propagation</code> with <code>Direction::Callers</code> and <code>max_depth</code> from the request. The
+result is projected back into <code>Impact</code>. Entity-level propagation (<code>analyze_with_seeds</code>) stays a
+separate answer, served by the analysis route, not mixed into cell distances.
+Rationale: projecting entity distances onto cells (minimum per cell) would change the numbers
+users see, because depth 3 in entity hops reaches far fewer cells than depth 3 in cell hops, and
+it would drop <code>Inherits</code>/<code>Imports</code>/<code>Contains</code> edges the current BFS follows.</p>
+</li>
+<li>
+<p><strong><code>fluid-core::analyze_impact</code> is removed</strong> once (2) lands with a parity test, together with
+<code>analyze_impact_json</code> in <code>fluid-wasm</code>. The wasm facade has no consumer, so nothing breaks. If an
+offline wasm worker needs impact later, <code>fluid-wasm</code> may depend on <code>model-analysis</code> directly
+(it has no I/O dependency); <code>fluid-core</code> does not.</p>
+</li>
+<li>
+<p><strong>Purity rule stays intact.</strong> <code>fluid-core</code> does not depend on <code>model-core</code> or <code>model-analysis</code>.
+The bridge stays in <code>fluid-index</code> (<code>crates/fluid-server → fluid-index → fluid-core</code>, and
+<code>fluid-index → model-analysis → model-core</code>). No async, filesystem or process code moves.</p>
+</li>
+<li>
+<p><strong>Analysis is exposed as data.</strong> <code>GET /api/model/analysis</code> returns <code>ModelAnalysis</code> extended with
+degrees (<code>Degree</code>) and unused entities (<code>Unused</code>), computed once per generation and cached in
+<code>AppState</code> (rule 5 of the performance doc: cache by <code>(generation, query)</code>). The client renders;
+it never recomputes.</p>
+</li>
+<li>
+<p><strong>Layered matrix spec is repository config.</strong> <code>fluid-index</code> reads an optional
+<code>.fluid/matrix.json</code> per repo and falls back to today’s directory buckets when it is absent or
+invalid (with a warning, never a panic). The file holds <code>MatrixSpec</code>’s <code>layers</code> plus path rules,
+not per-symbol assignments:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="json"><code><span class="line"><span style="color:#E1E4E8">{</span></span>
+<span class="line"><span style="color:#79B8FF">  "layers"</span><span style="color:#E1E4E8">: [</span></span>
+<span class="line"><span style="color:#E1E4E8">    { </span><span style="color:#79B8FF">"id"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"web-pages"</span><span style="color:#E1E4E8">,    </span><span style="color:#79B8FF">"label"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"apps/web · pages"</span><span style="color:#E1E4E8">,  </span><span style="color:#79B8FF">"order"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">"paths"</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">"apps/web/src/pages/"</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">"apps/web/src/app/"</span><span style="color:#E1E4E8">] },</span></span>
+<span class="line"><span style="color:#E1E4E8">    { </span><span style="color:#79B8FF">"id"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"web-features"</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">"label"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"apps/web · features/components"</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">"order"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">"paths"</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">"apps/web/src/components/"</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">"apps/web/src/layout/"</span><span style="color:#E1E4E8">] },</span></span>
+<span class="line"><span style="color:#E1E4E8">    { </span><span style="color:#79B8FF">"id"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"web-entities"</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">"label"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"apps/web · data/lib"</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">"order"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">2</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">"paths"</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">"apps/web/src/data/"</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">"apps/web/src/lib/"</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">"apps/web/src/api/"</span><span style="color:#E1E4E8">] },</span></span>
+<span class="line"><span style="color:#E1E4E8">    { </span><span style="color:#79B8FF">"id"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"packages"</span><span style="color:#E1E4E8">,     </span><span style="color:#79B8FF">"label"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"packages"</span><span style="color:#E1E4E8">,            </span><span style="color:#79B8FF">"order"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">3</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">"paths"</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">"packages/"</span><span style="color:#E1E4E8">] },</span></span>
+<span class="line"><span style="color:#E1E4E8">    { </span><span style="color:#79B8FF">"id"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"server"</span><span style="color:#E1E4E8">,       </span><span style="color:#79B8FF">"label"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"fluid-server"</span><span style="color:#E1E4E8">,        </span><span style="color:#79B8FF">"order"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">4</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">"paths"</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">"crates/fluid-server/"</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">"crates/fluid-cli/"</span><span style="color:#E1E4E8">] },</span></span>
+<span class="line"><span style="color:#E1E4E8">    { </span><span style="color:#79B8FF">"id"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"index"</span><span style="color:#E1E4E8">,        </span><span style="color:#79B8FF">"label"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"fluid-index"</span><span style="color:#E1E4E8">,         </span><span style="color:#79B8FF">"order"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">5</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">"paths"</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">"crates/fluid-index/"</span><span style="color:#E1E4E8">] },</span></span>
+<span class="line"><span style="color:#E1E4E8">    { </span><span style="color:#79B8FF">"id"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"core"</span><span style="color:#E1E4E8">,         </span><span style="color:#79B8FF">"label"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"fluid-core / wasm"</span><span style="color:#E1E4E8">,   </span><span style="color:#79B8FF">"order"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">6</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">"paths"</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">"crates/fluid-core/"</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">"crates/fluid-wasm/"</span><span style="color:#E1E4E8">] }</span></span>
+<span class="line"><span style="color:#E1E4E8">  ],</span></span>
+<span class="line"><span style="color:#79B8FF">  "domains"</span><span style="color:#E1E4E8">: { </span><span style="color:#79B8FF">"by"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"second-segment"</span><span style="color:#E1E4E8"> }</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>Longest matching path prefix wins; unmatched files go to a <code>root</code> layer. The output is still a
+<code>MatrixSpec</code>, so <code>/api/matrix</code> and <code>CodeMatrix</code> are unchanged. This part is <strong>not a boundary
+change</strong>: it applies ADR-0004 (rules and views are plain files in <code>.fluid/</code>) and may ship before
+this ADR is accepted.</p>
+</li>
+</ol>
+<h2 id="what-can-ship-before-acceptance">What can ship before acceptance</h2>
+<ul>
+<li><code>GET /api/model/analysis</code> (cycles, <code>cyclicEntities</code>, entity propagation, degrees, unused), its
+zod contract and shared fixture, and the Structure “Analysis” section. This only exposes the
+existing bridge; it does not change which engine serves <code>/api/impact</code>.</li>
+<li><code>.fluid/matrix.json</code> reading and the repo’s own file (test: fluid-coding has more than 4 cells).</li>
+<li>A criterion bench for <code>analyze_impact</code> and for the bridge on the same graph, to record the
+baseline <code>docs/quality/performance.md</code> still lists as “not measured yet”.</li>
+</ul>
+<h2 id="what-waits-for-acceptance">What waits for acceptance</h2>
+<ul>
+<li>Switching <code>/api/impact</code> to the cell-level Model propagation (decision 2).</li>
+<li>Removing <code>fluid-core::analyze_impact</code>, its tests and <code>fluid-wasm::analyze_impact_json</code>
+(decision 3), and updating <code>docs/architecture-model-bridge.md</code> “Compatibility”.</li>
+</ul>
+<h2 id="consequences">Consequences</h2>
+<p>Positive:</p>
+<ul>
+<li>One implementation of cycles and propagation; the Checks card and MCP <code>get_impact</code> read the same
+numbers as the Structure page.</li>
+<li>The <code>/api/impact</code> wire contract and <code>fixtures/contracts/impact.json</code> stay valid; a parity test
+compares the old BFS and the Model on the fixtures before the old one is deleted.</li>
+<li>fluid-core stays pure and wasm-buildable with no new dependency.</li>
+</ul>
+<p>Negative:</p>
+<ul>
+<li>Each generation now builds two <code>Model</code>s (entity-level and cell-level) on top of the <code>CodeGraph</code>
+and the matrix. That is extra memory against the 300 MB / 1M LOC budget and extra time against
+“Impact, 100k LOC graph p95 &lt; 100 ms”. The switch in decision 2 is gated on a bench that stays
+under that budget; if it does not, impact stays in fluid-core and this ADR is revised.</li>
+<li>fluid-coding depends on <code>model-analysis</code> semantics and release cadence (0.8 on crates.io). A
+breaking upstream change must be absorbed in <code>model_bridge.rs</code> only.</li>
+<li>Offline (wasm-only) impact is no longer available from <code>fluid-core</code>; it is not used today.</li>
+</ul>
+<h2 id="alternatives-considered">Alternatives considered</h2>
+<ul>
+<li><strong>Keep fluid-core’s BFS as the only engine and delete the bridge.</strong> Rejected: it duplicates what
+the canonical Model already does and would need its own cycles, degrees and unused analyses.</li>
+<li><strong>Serve <code>/api/impact</code> from entity-level <code>analyze_with_seeds</code> projected to cells.</strong> Rejected for
+now: it silently changes distances and the set of followed relation kinds (see decision 2).</li>
+<li><strong>Move <code>model-analysis</code> into fluid-core.</strong> Rejected: it couples the pure core to an external
+release train; the adapter layer is where the bridge belongs.</li>
+</ul>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/decisions/ADR-0033-single-analysis-engine.md">docs/decisions/ADR-0033-single-analysis-engine.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — a local workbench for reviewing agent-written code.</span><nav class="footer-links" aria-label="Footer navigation"><a class="footer-docs" href="/fluid-coding-site/docs/">Documentation</a><a href="https://github.com/badetitou/fluid-coding">GitHub ↗</a></nav></div></footer></body></html>

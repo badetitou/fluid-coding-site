@@ -1,0 +1,248 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ADR-0031 — fluid MCP tool server over stdio · fluid-coding</title><meta name="description" content="- Status: proposed"><meta property="og:title" content="ADR-0031 — fluid MCP tool server over stdio · fluid-coding"><meta property="og:description" content="- Status: proposed"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> ADR-0031 — fluid MCP tool server over stdio</nav><article class="prose"><h1 id="adr-0031--fluid-mcp-tool-server-over-stdio">ADR-0031 — fluid MCP tool server over stdio</h1>
+<ul>
+<li>Status: proposed</li>
+<li>Date: 2026-11-26</li>
+<li>Deciders: Benoit (to validate)</li>
+<li>Depends on: ADR-0030 (local API origin policy, proposed), ADR-0033 (single analysis engine, proposed)</li>
+</ul>
+<h2 id="context">Context</h2>
+<p><a href="/fluid-coding-site/docs/decisions/ADR-0005-agent-integration/">ADR-0005</a> and AGENTS.md rule 5 say agents are guests: Claude Code,
+opencode, Codex and Pharo MCP use the same MCP tools, and the in-app agent runs behind <code>AgentPort</code>
+(<code>crates/fluid-core/src/plugins/agent.rs</code>). No MCP server exists today:</p>
+<ul>
+<li><code>packages/contracts/src/mcp-tools.ts</code> defines zod schemas for 11 tools (<code>get_matrix</code>,
+<code>cell_symbols</code>, <code>get_entity</code>, <code>get_relations</code>, <code>get_impact</code>, <code>get_diff</code>, <code>list_tags</code>,
+<code>propose_tag</code>, <code>list_tasks</code>, <code>get_task</code>, <code>task_brief</code>); no Rust struct backs them, and there is no
+<code>propose_patch</code> tool.</li>
+<li><code>apps/web/src/lib/agents.ts</code> hardcodes <code>mcpToolCatalog</code> (8 entries) and <code>AgentsPage.tsx</code> shows it as
+if it were served.</li>
+<li><code>crates/fluid-server/src/agents/cli.rs</code> splits the configured command on whitespace, appends the
+prompt as one argv value (no shell) and sets the cwd (the task worktree, ADR-0029). The prompt tells
+the agent to “Use the read-only MCP tools for facts” — none are passed.</li>
+<li>The facts already exist behind loopback HTTP routes: <code>/api/matrix</code>, <code>/api/entity/{key}</code>,
+<code>/api/relations/{key}</code>, <code>/api/impact</code>, <code>/api/tags</code>. Patch proposals live only in <code>fluid-server</code>
+memory (<code>state.inner.patches</code>), registered by <code>POST /api/edits/propose</code>, which never applies.
+<code>POST /api/tags</code> upserts any status, including <code>accepted</code>.</li>
+<li>Crate graph: <code>fluid-cli</code> (binary <code>fluid-coding</code>) → <code>fluid-server</code> → <code>fluid-index</code> → <code>fluid-core</code>.</li>
+<li>The official Rust SDK is <code>rmcp</code> (modelcontextprotocol/rust-sdk). <code>cargo search rmcp</code> on
+2026-11-26 reports <code>rmcp = "3.11.0"</code> and <code>rmcp-macros = "3.11.0"</code>. Features (<code>server</code>,
+<code>transport-io</code>, <code>client</code>, <code>transport-child-process</code>, schemars integration) must be confirmed against
+that version’s docs when the crate is added.</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<ol>
+<li>
+<p><strong>Transport: stdio first.</strong> Every target CLI spawns local MCP servers as child processes over
+stdio. Streamable HTTP is a later step, mounted on <code>fluid-server</code> only once ADR-0030’s origin/token
+policy is accepted and implemented; it reuses the same tool registry.</p>
+</li>
+<li>
+<p><strong>Location: new crate <code>fluid-mcp</code>, exposed as <code>fluid-coding mcp</code>.</strong> <code>fluid-mcp</code> is a library
+(rmcp server, tool registry wiring, HTTP client) depending on <code>fluid-core</code> only for wire types.
+<code>fluid-cli</code> gains an <code>mcp</code> subcommand that calls <code>fluid_mcp::serve_stdio(options)</code> and returns
+before any window, asset extraction or server bind. <code>fluid-server</code>’s dev binary gets the same
+subcommand so <code>cargo run -p fluid-server -- mcp</code> works without packaging. One installed executable
+serves the app and the MCP bridge; no second binary to ship or sign.</p>
+</li>
+<li>
+<p><strong>State: the bridge proxies the running fluid-server; it does not load the index.</strong></p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Proxy loopback HTTP (chosen)</th>
+<th>Read index directly (<code>fluid-mcp → fluid-index</code>)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Source of state</td>
+<td>one: the app’s warm index, tags, proposals</td>
+<td>a second copy that can diverge</td>
+</tr>
+<tr>
+<td>Writes</td>
+<td>through <code>/api/edits/propose</code>, visible in Review at once</td>
+<td>cannot reach in-memory proposals</td>
+</tr>
+<tr>
+<td>Cold start</td>
+<td>process spawn + one HTTP call</td>
+<td>full <code>fluid_index::load</code> per agent run</td>
+</tr>
+<tr>
+<td>Standalone use</td>
+<td>needs the app running</td>
+<td>works without the app</td>
+</tr>
+<tr>
+<td>The server URL and a per-run token are passed as <code>fluid-coding mcp --server &lt;url&gt; --run &lt;id&gt;</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>(token via env <code>FLUID_MCP_TOKEN</code>, never argv). For a CLI launched by hand, the bridge reads</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>.fluid-coding/server.json</code> (gitignored, written by the server on bind: url, pid). If no server</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>answers, tools return a typed MCP error “fluid-coding is not running”, never stale data. A</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>read-only direct-index mode is explicitly deferred.</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+</li>
+<li>
+<p><strong>v1 tools and access.</strong> The registry is a Rust table in <code>fluid-core</code>
+(<code>McpToolDescriptor { name, summary, access, params }</code>), pure data, wasm-safe. Inputs/outputs are
+serde structs in <code>fluid-core</code>; JSON Schema for <code>tools/list</code> is derived from them (schemars), and
+<code>mcp-tools.ts</code> becomes generated per ADR-0034.</p>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Access</th>
+<th>Backed by</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>get_matrix</code></td>
+<td>read</td>
+<td><code>GET /api/matrix</code></td>
+</tr>
+<tr>
+<td><code>cell_symbols</code></td>
+<td>read</td>
+<td>Miller/cell route (add a paginated route if missing)</td>
+</tr>
+<tr>
+<td><code>get_entity</code></td>
+<td>read</td>
+<td><code>GET /api/entity/{key}</code></td>
+</tr>
+<tr>
+<td><code>get_relations</code></td>
+<td>read</td>
+<td><code>GET /api/relations/{key}</code></td>
+</tr>
+<tr>
+<td><code>get_impact</code></td>
+<td>read</td>
+<td><code>GET /api/impact</code>; engine per ADR-0033</td>
+</tr>
+<tr>
+<td><code>propose_patch</code></td>
+<td>write-propose</td>
+<td><code>POST /api/edits/propose</code> (new contract entry)</td>
+</tr>
+<tr>
+<td><code>propose_tag</code></td>
+<td>write-propose</td>
+<td>new <code>POST /api/tags/propose</code>, forces <code>status: proposed</code></td>
+</tr>
+<tr>
+<td>No tool applies a patch, restores a checkpoint, accepts a tag or writes files. <code>propose_tag</code> gets</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>its own route because the generic <code>POST /api/tags</code> accepts <code>accepted</code>; the server, not the bridge,</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>enforces “proposal only”. Proposals carry the run id so ADR-0029’s worktree root and task key are</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>attached server-side. <code>get_diff</code>, <code>list_tags</code>, <code>list_tasks</code>, <code>get_task</code>, <code>task_brief</code> follow in</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>v1.1 once their Rust structs exist. <code>get_impact</code> ships with whatever <code>/api/impact</code> serves; its</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>output shape is fixed now, so ADR-0033 changes the engine, not the tool.</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+</li>
+<li>
+<p><strong>Config injection: one adapter per provider, written to a run file.</strong> A typed
+<code>McpInjector</code> per agent manifest (rule 9) turns <code>{exe, args, env}</code> into extra argv/env for
+<code>cli.rs</code>; no special case in routes. The config file goes to
+<code>.fluid-coding/runs/&lt;run&gt;/mcp.json</code>; the user’s <code>~/.claude.json</code>, <code>~/.codex/config.toml</code> or repo
+<code>opencode.json</code> are never edited. Argv is still built without a shell.</p>
+<ul>
+<li><strong>Claude Code</strong> (known): <code>--mcp-config &lt;file&gt; --strict-mcp-config</code>, plus
+<code>--allowedTools mcp__fluid__*</code> so <code>-p</code> runs are not blocked on permission prompts. Verify flag
+names on the installed version.</li>
+<li><strong>Codex</strong> (to verify): <code>codex exec -c 'mcp_servers.fluid.command="…"' -c 'mcp_servers.fluid.args=[…]'</code> (TOML dotted overrides of <code>[mcp_servers]</code>).</li>
+<li><strong>opencode</strong> (to verify): an <code>mcp.fluid = { type: "local", command: [...] }</code> entry in a config
+pointed to by <code>OPENCODE_CONFIG</code> (or <code>OPENCODE_CONFIG_CONTENT</code> if supported).</li>
+<li>Ollama / in-app provider: no MCP client; the Fluid Agent calls the same registry in-process.
+An unknown provider runs without tools and the run records a warning; it never fails silently.</li>
+</ul>
+</li>
+<li>
+<p><strong>Catalog from the server.</strong> <code>GET /api/agents/tools</code> returns the <code>fluid-core</code> registry plus a
+<code>served: bool</code> per tool. The Agents screen fetches it; <code>mcpToolCatalog</code> is deleted from
+<code>apps/web</code> and <code>packages/contracts</code>. A Rust test asserts the bridge’s <code>tools/list</code> names equal the
+registry.</p>
+</li>
+<li>
+<p><strong>Testing.</strong> Unit: registry ↔ contract names; each tool maps its input to the right route
+(mock HTTP). Integration (<code>crates/fluid-mcp/tests/stdio.rs</code>): start <code>fluid_server</code> in-process on an
+ephemeral loopback port over a fixture workspace, spawn <code>fluid-coding mcp</code> with rmcp’s
+child-process client, call <code>tools/list</code> and <code>get_matrix</code>, and compare with
+<code>fixtures/contracts/mcp/get_matrix.json</code>, which Vitest also parses with the zod schema. A
+<code>propose_patch</code> test asserts the proposal appears in <code>GET /api/edits</code> and no file changed.
+Dogfood: a real <code>claude -p</code> run on fluid-coding calls <code>mcp__fluid__get_matrix</code>.</p>
+</li>
+</ol>
+<h2 id="consequences">Consequences</h2>
+<p>Positive:</p>
+<ul>
+<li>Rule 5 becomes true: external CLIs and the in-app agent share one registry and one state.</li>
+<li>Agent writes land as reviewable proposals; trust modes and checkpoints stay the only apply path.</li>
+<li>No new long-lived process and near-zero cold start per agent run.</li>
+<li>The Agents screen shows what is actually served.</li>
+</ul>
+<p>Negative:</p>
+<ul>
+<li>MCP tools only work while the app (or <code>fluid-server</code>) runs; a hand-launched CLI without the app
+gets a clear error, not data.</li>
+<li>The bridge depends on loopback HTTP being reachable by a non-browser client: ADR-0030 must allow
+token-authenticated requests without an <code>Origin</code> header.</li>
+<li>Three provider-specific injectors to maintain, two of them not yet verified on real binaries.</li>
+<li><code>rmcp</code> (plus schemars, if needed) is a new dependency with frequent major versions; pin exactly.</li>
+</ul>
+<h2 id="alternatives-considered">Alternatives considered</h2>
+<ul>
+<li><strong><code>fluid-mcp → fluid-index</code> reading the index directly.</strong> Rejected for v1: duplicated state, full
+index load per run, and writes could not reach the server’s in-memory proposals.</li>
+<li><strong>MCP subcommand inside <code>fluid-cli</code> without a crate.</strong> Rejected: <code>fluid-cli</code> is the app shell
+(window, assets); the protocol code would bloat it and be untestable without the shell.</li>
+<li><strong>Streamable HTTP first.</strong> Rejected: needs ADR-0030 first, and every target CLI supports stdio.</li>
+<li><strong>Editing each CLI’s global config.</strong> Rejected: mutates user files outside the repo and leaks
+fluid tools into unrelated sessions.</li>
+</ul>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/decisions/ADR-0031-mcp-tool-server.md">docs/decisions/ADR-0031-mcp-tool-server.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — a local workbench for reviewing agent-written code.</span><nav class="footer-links" aria-label="Footer navigation"><a class="footer-docs" href="/fluid-coding-site/docs/">Documentation</a><a href="https://github.com/badetitou/fluid-coding">GitHub ↗</a></nav></div></footer></body></html>

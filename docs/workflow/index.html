@@ -1,0 +1,161 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>User workflow — from a sentence to main · fluid-coding</title><meta name="description" content="Target loop for the user's daily work in fluid-coding: describe a task in chat, validate the proposed"><meta property="og:title" content="User workflow — from a sentence to main · fluid-coding"><meta property="og:description" content="Target loop for the user's daily work in fluid-coding: describe a task in chat, validate the proposed"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> User workflow — from a sentence to main</nav><article class="prose"><h1 id="user-workflow--from-a-sentence-to-main">User workflow — from a sentence to main</h1>
+<p>Target loop for the user’s daily work in fluid-coding: describe a task in chat, validate the proposed
+issue, let an agent work it in an isolated worktree, review the result, then integrate into <code>main</code>.
+Status is kept current in the last section; the diagram is the target, not the current state.</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TD</span></span>
+<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">([</span><span style="color:#9ECBFF">Chat: user describes the goal</span><span style="color:#F97583">])</span><span style="color:#F97583"> --&gt;</span><span style="color:#FFAB70"> B</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Agent proposes issue + sub</span><span style="color:#E1E4E8">-</span><span style="color:#9ECBFF">tasks&lt;br/&gt;as a draft card</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">--&gt;|</span><span style="color:#9ECBFF">Discard</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> A</span></span>
+<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">--&gt;|</span><span style="color:#9ECBFF">Create task</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> C</span><span style="color:#F97583">[(</span><span style="color:#9ECBFF">Board: Todo</span><span style="color:#F97583">)]</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> D</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">User chooses</span><span style="color:#F97583">}</span></span>
+<span class="line"><span style="color:#FFAB70">    D </span><span style="color:#F97583">--&gt;|</span><span style="color:#9ECBFF">Start work</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> E</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Agent runs in task worktree&lt;br/&gt;.fluid</span><span style="color:#E1E4E8">-</span><span style="color:#9ECBFF">coding/worktrees/</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    D </span><span style="color:#F97583">--&gt;|</span><span style="color:#9ECBFF">Set autowork</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> F</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Autowork flag on the issue</span><span style="color:#F97583">]</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#FFAB70">    F </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> G</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">Every X minutes: any agent running?</span><span style="color:#F97583">}</span></span>
+<span class="line"><span style="color:#FFAB70">    G </span><span style="color:#F97583">--&gt;|</span><span style="color:#9ECBFF">no</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> H</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Take next autowork issue&lt;br/&gt;queue order</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    G </span><span style="color:#F97583">--&gt;|</span><span style="color:#9ECBFF">yes</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> G</span></span>
+<span class="line"><span style="color:#FFAB70">    H </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> E</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#FFAB70">    E </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> I</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Agent finishes:&lt;br/&gt;patch proposed in the worktree</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    I </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> J</span><span style="color:#F97583">[(</span><span style="color:#9ECBFF">Board: In Review</span><span style="color:#F97583">)]</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#FFAB70">    J </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> K</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Inspect the worktree in fluid</span><span style="color:#E1E4E8">-</span><span style="color:#9ECBFF">coding&lt;br/&gt;structure, model, diff, session analysis</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    K </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> L</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">Decision</span><span style="color:#F97583">}</span></span>
+<span class="line"><span style="color:#FFAB70">    L </span><span style="color:#F97583">--&gt;|</span><span style="color:#9ECBFF">Comment in chat</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> M</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Comment sent to the agent</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    M </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> N</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Issue back to In Progress</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    N </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> E</span></span>
+<span class="line"><span style="color:#FFAB70">    L </span><span style="color:#F97583">--&gt;|</span><span style="color:#9ECBFF">Validate</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> O</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">Integrate into main</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    O </span><span style="color:#F97583">--&gt;</span><span style="color:#FFAB70"> P</span><span style="color:#F97583">([</span><span style="color:#9ECBFF">Done</span><span style="color:#F97583">])</span></span></code></pre>
+<h2 id="steps-and-where-they-live">Steps and where they live</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Step</th>
+<th>Target behaviour</th>
+<th>Status</th>
+<th>Where</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Chat describes the goal</td>
+<td>Free text in a chat composer</td>
+<td>Done</td>
+<td>Home composer, Board create form (<a href="/fluid-coding-site/docs/decisions/ADR-0035-task-intake-chat/">ADR-0035</a>)</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Proposed issues as graphical cards, validate or not</td>
+<td>Draft card with Create / Discard; sub-tasks shown</td>
+<td>Done</td>
+<td><code>TaskDraftCard</code>, <code>POST /api/tasks/intake</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td>Tasks land in Todo</td>
+<td>Created on the connected forge, else local board</td>
+<td>Done for creation; local file persistence partial</td>
+<td><a href="/fluid-coding-site/docs/decisions/ADR-0023-forge-issue-creation/">ADR-0023</a>, <code>local_save.rs</code>, <a href="../STATUS.md">STATUS</a> Next 5</td>
+</tr>
+<tr>
+<td>4.1</td>
+<td>Start work: agent proposes a solution</td>
+<td>Worktree per task, agent run, patch proposed</td>
+<td>Done</td>
+<td><a href="/fluid-coding-site/docs/decisions/ADR-0029-start-work-task-worktree/">ADR-0029</a></td>
+</tr>
+<tr>
+<td>4.2</td>
+<td>Set autowork; queue picks next issue when no agent runs</td>
+<td>Autowork flag, polling loop, single-agent queue</td>
+<td>Not started</td>
+<td>—</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Done agent work goes to Review; inspect the worktree</td>
+<td><code>in-review</code> status; inspection with structure, model, diff, sessions</td>
+<td>Status exists; inspection partial (dock Changes, session analysis, Structure); no link from a task to its worktree review</td>
+<td><code>TaskStatus::InReview</code>, <a href="/fluid-coding-site/docs/decisions/ADR-0028-session-analysis-rendering/">ADR-0028</a></td>
+</tr>
+<tr>
+<td>5.1</td>
+<td>Comment in chat, issue returns to In Progress</td>
+<td>Comment on a review task re-runs the agent in the same worktree</td>
+<td>Not started</td>
+<td>—</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Validate, integrate into <code>main</code></td>
+<td>Merge the task branch into <code>main</code>, clean the worktree</td>
+<td>Not started (worktrees are never removed automatically, see ADR-0029)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<h2 id="issues">Issues</h2>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Issue</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>4.2 Autowork queue</td>
+<td><a href="https://github.com/badetitou/fluid-coding/issues/9">#9</a></td>
+</tr>
+<tr>
+<td>5 Inspect a task worktree</td>
+<td><a href="https://github.com/badetitou/fluid-coding/issues/10">#10</a></td>
+</tr>
+<tr>
+<td>5.1 Review comment reopens the task</td>
+<td><a href="https://github.com/badetitou/fluid-coding/issues/11">#11</a></td>
+</tr>
+<tr>
+<td>6 Validate and merge into main</td>
+<td><a href="https://github.com/badetitou/fluid-coding/issues/12">#12</a></td>
+</tr>
+</tbody>
+</table>
+<p>All four are in GitHub Project #7 with status Todo.</p>
+<p>Blockers and risks found by the workflow trial:</p>
+<table>
+<thead>
+<tr>
+<th>Problem</th>
+<th>Issue</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Intake fails without a provider and hangs on a slow agent (step 1)</td>
+<td><a href="https://github.com/badetitou/fluid-coding/issues/13">#13</a></td>
+</tr>
+<tr>
+<td>Start work refused after the project is activated (step 3)</td>
+<td><a href="https://github.com/badetitou/fluid-coding/issues/14">#14</a></td>
+</tr>
+<tr>
+<td>Server can start work in another checkout when <code>FLUID_WORKSPACE</code> is set (step 0)</td>
+<td><a href="https://github.com/badetitou/fluid-coding/issues/15">#15</a></td>
+</tr>
+</tbody>
+</table>
+<h2 id="decisions">Decisions</h2>
+<ul>
+<li><strong>Autowork is global.</strong> One agent slot for the whole app in v1: the queue starts the next autowork
+issue only when no agent is running anywhere. Per-project slots can come later by changing the queue key.</li>
+<li><strong>Review stays in the existing pages.</strong> No new navigation item. A task in review opens Structure,
+Changes and session analysis scoped to its worktree. A worktree selector in the topbar switches
+the scope, so the same pages serve the main checkout and any task worktree.</li>
+<li><strong>Integration.</strong> A local task merges into <code>main</code> with <code>git merge --no-ff</code>, so each task keeps a
+visible merge commit. It runs only on an explicit Validate click, and only when the main checkout
+is clean. A forge task opens a PR instead; the review happens on the forge (<a href="/fluid-coding-site/docs/decisions/ADR-0016-forge-accounts-and-review/">ADR-0016</a>).</li>
+</ul>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/workflow.md">docs/workflow.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — a local workbench for reviewing agent-written code.</span><nav class="footer-links" aria-label="Footer navigation"><a class="footer-docs" href="/fluid-coding-site/docs/">Documentation</a><a href="https://github.com/badetitou/fluid-coding">GitHub ↗</a></nav></div></footer></body></html>

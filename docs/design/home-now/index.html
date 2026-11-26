@@ -1,0 +1,177 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Home (&quot;Now&quot;) — page spec · fluid-coding</title><meta name="description" content="Status: draft for validation (W8). Mockup: home-now-mockup.html — open it in a"><meta property="og:title" content="Home (&quot;Now&quot;) — page spec · fluid-coding"><meta property="og:description" content="Status: draft for validation (W8). Mockup: home-now-mockup.html — open it in a"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> Home (&quot;Now&quot;) — page spec</nav><article class="prose"><h1 id="home-now--page-spec">Home (“Now”) — page spec</h1>
+<p>Status: draft for validation (W8). Mockup: <a href="./home-now-mockup.html"><code>home-now-mockup.html</code></a> — open it in a
+browser, resize to 375 px, toggle the OS light/dark setting.</p>
+<h2 id="purpose">Purpose</h2>
+<p>Home answers four questions in this order: <em>what is an agent doing right now, what am I working on,
+what comes next, what waits for my review.</em> The current page (<code>apps/web/src/pages/NowPage.tsx</code>) is a
+diff-review page (“Review the current change.”) and answers none of them. Diff review stays on
+<code>/changes</code>; Home links to it.</p>
+<h2 id="data-contract">Data contract</h2>
+<p>One request: <code>GET /api/now</code>, one aggregate computed in Rust (AGENTS.md rules 1 and 3). The client never
+joins sessions, tasks and patches itself. Each section below names the field of the aggregate and the
+server source that fills it, read once per request.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Source (server)</th>
+<th>Available now?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>currentAgent</code></td>
+<td><code>ChatSessionStore</code> (<code>crates/fluid-server/src/chat_sessions.rs</code>): most recent session by <code>updatedAt</code> (one pass over the session files). Status is <code>waiting</code> or <code>done</code> only</td>
+<td>session yes; <code>running</code>/<code>failed</code> need a run registry and a recorded turn error, which do not exist</td>
+</tr>
+<tr>
+<td><code>currentTask</code></td>
+<td><code>currentAgent.taskKey</code> → task store (<code>project_tasks.rs</code>), accepted only when <code>in_progress</code> or <code>in_review</code>, else the lowest-numbered <code>in_progress</code> task</td>
+<td>yes</td>
+</tr>
+<tr>
+<td><code>currentTask.worktree</code></td>
+<td><code>fluid_index::existing_task_worktree</code> (read-only, ADR-0029 path); branch = <code>task.branch</code>, else the derived <code>branch_name</code> when the worktree exists</td>
+<td>yes</td>
+</tr>
+<tr>
+<td><code>currentTask.changedFiles</code></td>
+<td><code>git status --porcelain</code> run <strong>in the worktree</strong> (fluid-index)</td>
+<td><strong>deferred</strong>, not served</td>
+</tr>
+<tr>
+<td><code>currentTask.lastCheckpoint</code></td>
+<td>checkpoint store; checkpoints carry no repo field, only <code>checkpoint_roots</code> maps them to a worktree</td>
+<td><strong>deferred</strong>, not served</td>
+</tr>
+<tr>
+<td><code>nextTask</code></td>
+<td>task store: first <code>todo</code>, sorted by milestone (lexical string order, tasks without a milestone last), then number, then key. <code>Task</code> has no priority field, so priority is not in the order</td>
+<td>yes, without priority</td>
+</tr>
+<tr>
+<td><code>toReview.patches</code></td>
+<td>patch store minus <code>AppState.applied_patches</code> (written by <code>apply_patch</code> after all writes succeed, cleared when the matching <code>before &lt;id&gt;</code> checkpoint is restored). Serves id, taskKey, summary, file count; no age or +/- counts (proposals have no timestamp)</td>
+<td>yes</td>
+</tr>
+<tr>
+<td><code>toReview.checks</code></td>
+<td>checks for the current worktree</td>
+<td><strong>deferred</strong>, not served</td>
+</tr>
+<tr>
+<td><code>reviewQueue</code></td>
+<td>tags with <code>status = proposed</code>, tasks <code>in_review</code> (counts + first 5). Orphaned tags are <strong>deferred</strong> (need a graph key set per request)</td>
+<td>yes</td>
+</tr>
+<tr>
+<td><code>modelHealth</code></td>
+<td>index / task-parse warnings are served as <code>warnings</code> (startup snapshot, not refreshed on project switch). Cycles and impacted cells are <strong>deferred</strong> to W5</td>
+<td>warnings only</td>
+</tr>
+</tbody>
+</table>
+<p>Each field is independently nullable. A source that fails to read adds one entry to the top-level
+<code>errors: [{ field, message }]</code> (<code>field</code> is an enum of the aggregate’s fields; today only <code>currentAgent</code>,
+the only source that does I/O that can fail), so one failing source degrades one card, never the page.
+The other sources are in memory and cannot fail.</p>
+<h2 id="section-order-and-cards">Section order and cards</h2>
+<p>Desktop (≥ 1180 px content): two columns. Left = <strong>Now</strong> (1, 2, 4), right = <strong>Next</strong> (3, 5, 6).
+Narrow (&lt; 1180 px content, or 375 px phone): one column in the numeric order 1 → 6.</p>
+<h3 id="1-current-agent">1. Current agent</h3>
+<ul>
+<li>Fields: provider (<code>agent</code>, e.g. <code>claude</code> via Fluid Agent), session title, linked task key, elapsed
+time since the run started (or “last activity 4 min ago” when idle), status pill
+<code>running | waiting | done | failed</code>, turn count, trust mode.</li>
+<li>Actions: <strong>Open conversation</strong> (opens the agent dock on that session), <strong>Stop</strong> (running only).</li>
+<li>“waiting” means the run ended with proposals awaiting review; the pill links to section 4.</li>
+<li>Empty: “No agent run yet. Start a task or open the agent dock.” with <strong>Open dock</strong>.</li>
+</ul>
+<h3 id="2-current-task">2. Current task</h3>
+<ul>
+<li>Fields: key (<code>local:1</code>), title, status pill, milestone, branch (<code>1-record-demo-videos-in-demo</code>),
+worktree path (shortened, copyable), changed files <em>in the worktree</em> with +/− counts (max 6, then
+“+N more”), last checkpoint (label + age).</li>
+<li>Actions: <strong>Open worktree diff</strong> (<code>/changes?worktree=…</code>), <strong>Reveal in Finder</strong>, <strong>Mark in review</strong>
+(after W2).</li>
+<li>Empty: “No task in progress.” + the next-task card’s <strong>Start work</strong> button is promoted.</li>
+</ul>
+<h3 id="3-next-task">3. Next task</h3>
+<ul>
+<li>Fields: key, title, milestone, labels, one-line body excerpt, “N more todo”.</li>
+<li>Action: <strong>Start work</strong> → <code>POST /api/tasks/{key}/start</code> (ADR-0029). Button disabled with a tooltip when
+the task is remote and read-only.</li>
+<li>Empty: “Nothing in todo.” + <strong>New task</strong>.</li>
+</ul>
+<h3 id="4-to-review">4. To review</h3>
+<ul>
+<li>Patches proposed by agents and not yet applied, grouped by task: summary, files, +/−, age,
+<strong>Review</strong> (opens <code>/changes</code> on that patch), <strong>Apply</strong> (secondary).</li>
+<li>Checks for the current worktree: compact list, failing first.</li>
+<li>Empty: “Nothing waiting for review.” (positive tone, no illustration).</li>
+</ul>
+<h3 id="5-review-queue">5. Review queue</h3>
+<ul>
+<li>Three counted rows, each expandable to at most 5 items: proposed tags (target + confidence bar),
+tasks <code>in_review</code>, orphaned tags. Link “Review →” to <code>/tags</code> and <code>/tasks</code>.</li>
+<li>Empty: the section collapses to a single line “Queue empty”.</li>
+</ul>
+<h3 id="6-model-health-collapsed-by-default">6. Model health (collapsed by default)</h3>
+<ul>
+<li>Collapsed summary line: <code>0 cycles · 2 impacted cells · 1 warning</code>, warning tone if any warning.</li>
+<li>Expanded: cycle list, impacted cells, indexing / task-parse warnings (e.g.
+<code>unknown task status 'parked' in .claude/issues/1-demo-videos.md</code>).</li>
+<li>Open/closed state is a per-viewer preference (localStorage), not repository state.</li>
+</ul>
+<h3 id="header">Header</h3>
+<ul>
+<li>Eyebrow: project name · branch of main checkout. Title is the task-centred sentence
+(“Recording demo videos” when a task is current, “Pick the next task” otherwise). No hero metrics
+strip: the old four metrics move to <code>/changes</code>.</li>
+</ul>
+<h2 id="states">States</h2>
+<ul>
+<li><strong>Loading:</strong> first load shows skeleton cards with the final heights (no layout shift). Refetch keeps
+the old data visible with a small spinner in the header; budget p95 &lt; 150 ms server side.</li>
+<li><strong>Error (whole request):</strong> one banner at the top “Could not load /api/now — retry”, cards hidden.</li>
+<li><strong>Error (one field):</strong> the card shows its title and a one-line error with <strong>Retry</strong>; other cards render.</li>
+<li><strong>Live updates:</strong> the page refetches after each agent turn the dock receives, on window focus, and
+after Start work / Apply. No polling faster than 10 s.</li>
+</ul>
+<h2 id="deferred">Deferred</h2>
+<ul>
+<li><strong>Until W2 (task persistence + status vocabulary):</strong> <code>nextTask</code> ordering by priority, <strong>Mark in
+review</strong>, a <code>parked</code>/<code>blocked</code> status. <code>currentTask</code>, <code>nextTask</code> and the <code>in_review</code> queue are served
+now: they only use <code>todo</code>, <code>in_progress</code> and <code>in_review</code>, which survive ADR-0032.</li>
+<li><strong>Until W5 (model bridge served):</strong> cycles and impacted cells in Model health. Until then the card
+shows warnings only and says “cycle analysis not available yet”.</li>
+<li><strong>Not served yet:</strong> <code>currentTask.changedFiles</code>, <code>currentTask.lastCheckpoint</code>, <code>toReview.checks</code>,
+<code>modelHealth</code> cycles / impacted cells, orphaned tags.</li>
+<li>Worktree-scoped checks: shown when the checks runner accepts a root; until then the card says
+“checks: main checkout”.</li>
+</ul>
+<h2 id="layout-fix-tasks-board-squeezed-by-the-agent-dock-at-1440-px">Layout fix: Tasks board squeezed by the agent dock at 1440 px</h2>
+<p>Measured: 1440 − rail 36 − dock 410 − padding 60 ≈ 934 px of content, while <code>.tasks-layout</code> needs
+4 × 220 + 3 × 10 (board) + 16 + 300 (detail) ≈ 1226 px. The <code>max-width: 1180px</code> media query only reads
+the viewport, so it never fires with the dock open, and the board’s “In Review” column is cut.</p>
+<p><strong>Recommendation: container queries on the content area.</strong> Set
+<code>.shell-content { container: content / inline-size; }</code> and move the layout breakpoints of pages that
+share space with the dock from <code>@media (max-width: 1180px)</code> to <code>@container content (max-width: 1240px)</code>.
+On Tasks the detail panel then drops below the board (or the board gets the full row) whenever the
+dock makes the content narrow, at any window size. Home uses the same container breakpoint for its
+two-column → one-column switch.</p>
+<p>Rejected alternative: collapsing the dock by default on Tasks. It hides the conversation that Start
+work just opened (ADR-0029 decision 3) and only fixes one page.</p>
+<h2 id="component-plan-for-the-implementation--150-lines-each">Component plan (for the implementation, ≤ 150 lines each)</h2>
+<p><code>NowPage</code> (layout only) · <code>CurrentAgentCard</code> · <code>CurrentTaskCard</code> · <code>NextTaskCard</code> · <code>ReviewCard</code> ·
+<code>ReviewQueueCard</code> · <code>ModelHealthCard</code>. Formatting (elapsed time, file list truncation, empty-state
+selection) lives in <code>pages/now/model.ts</code> with Vitest tests. The aggregate type comes from the Rust
+struct (generated, AGENTS.md rule 6) with a zod schema at the fetch boundary and a shared fixture.</p>
+<h2 id="open-points">Open points</h2>
+<ul>
+<li>Session status: <code>ChatSession</code> has no status field. <code>running</code> needs the in-flight run registry,
+<code>failed</code> needs the last turn’s error recorded. Proposed derivation, to confirm: in-flight → running;
+the session’s latest turn proposed a patch still pending → waiting (implemented, session-specific); last turn error → failed; otherwise done.</li>
+<li>Branch format: the code produces <code>{number}-{slug}</code> (<code>fluid_core::branch_name</code>), not <code>task/{number}-…</code>.</li>
+</ul>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/design/home-now.md">docs/design/home-now.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — a local workbench for reviewing agent-written code.</span><nav class="footer-links" aria-label="Footer navigation"><a class="footer-docs" href="/fluid-coding-site/docs/">Documentation</a><a href="https://github.com/badetitou/fluid-coding">GitHub ↗</a></nav></div></footer></body></html>

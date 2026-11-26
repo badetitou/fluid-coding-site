@@ -1,0 +1,53 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Create a project: one field · fluid-coding</title><meta name="description" content="Status: chosen direction (option A), draft for implementation. Issue #18."><meta property="og:title" content="Create a project: one field · fluid-coding"><meta property="og:description" content="Status: chosen direction (option A), draft for implementation. Issue #18."><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> Create a project: one field</nav><article class="prose"><h1 id="create-a-project-one-field">Create a project: one field</h1>
+<p>Status: chosen direction (option A), draft for implementation. Issue <a href="https://github.com/badetitou/fluid-coding/issues/18">#18</a>.
+Replaces the two-mode page in <a href="../../apps/web/src/pages/SetupPage.tsx"><code>SetupPage.tsx</code></a> as the default path.
+Contract and detection rules stay those of <a href="/fluid-coding-site/docs/decisions/ADR-0015-first-run-project-setup/">ADR-0015</a>.</p>
+<h2 id="purpose">Purpose</h2>
+<p>A first-time user gives one folder and gets a working project. Every other decision is optional and hidden
+until asked for. The flow still produces the same validated <code>SetupProposal</code>, and nothing is written before
+Create.</p>
+<h2 id="flow">Flow</h2>
+<ol>
+<li><strong>Folder field</strong> (<code>Folder of your project</code>). Pre-filled from the launch directory when one was detected.
+Drag-and-drop or paste. Detection runs on blur or Enter, offline, through the existing deterministic scan.</li>
+<li><strong>Confirmation card</strong> appears when the folder is found: name, repository count, languages, a <code>Found</code> tag.
+Nothing to fill in.</li>
+<li><strong>Details</strong> (collapsed <code>&lt;details&gt;</code>): name, suggested plugins, permissions, open questions. Opening it does not
+change the default; the proposal stays valid without touching it.</li>
+<li><strong>Create project</strong> is the only primary action. It applies the proposal, writes <code>.fluid-coding/project.json</code>,
+activates the project, then goes to the map (same as today’s apply).</li>
+</ol>
+<p>Common case: one decision (the folder), one click.</p>
+<h2 id="error-state">Error state</h2>
+<ul>
+<li>Folder not found: the field gets <code>aria-invalid</code>, one <code>role="alert"</code> message (“We can’t find that folder.”)
+with two actions: <strong>Browse folders</strong> and a suggested path when one is close. Create stays disabled.</li>
+<li>Detection fails for another reason: the same alert shape, message from the server, no silent fallback.</li>
+</ul>
+<h2 id="decisions-taken-here-to-confirm-in-review">Decisions taken here (to confirm in review)</h2>
+<ul>
+<li>The <strong>Guided / Chat</strong> tabs leave the first screen. Chat stays reachable from Details as a fallback for
+someone who wants to describe the project. Guided form fields are the Details fields.</li>
+<li>The review panel is no longer a separate step: its content lives in Details.</li>
+<li>Permission consent appears only when the proposal needs a permission the user has not allowed. Otherwise
+it is not shown.</li>
+</ul>
+<h2 id="accessibility-and-layout">Accessibility and layout</h2>
+<ul>
+<li>Single column, max width 560 px, works at 375 px without horizontal scroll.</li>
+<li>Input labelled; errors announced; focus moves to the alert when it appears.</li>
+<li>Keyboard: Enter in the field runs detection; Tab order is field → Details → Create.</li>
+<li>Respects <code>prefers-reduced-motion</code>; light and dark from the existing tokens in <code>styles.css</code>.</li>
+</ul>
+<h2 id="out-of-scope">Out of scope</h2>
+<ul>
+<li>Hosted registries, automatic indexing at setup time, changes to the Rust proposal logic.</li>
+</ul>
+<h2 id="implementation-slices-proposed-one-pr-each">Implementation slices (proposed, one PR each)</h2>
+<ol>
+<li>Pure model for the one-field state (detected / not found / detecting) with tests next to <code>lib/setupCore.ts</code>.</li>
+<li>Components: folder field, confirmation card, Details disclosure, each under 150 lines.</li>
+<li>Wire <code>SetupPage</code> to the new default; keep guided and chat inside Details. Remove the tabs from the first screen.</li>
+<li>Dogfood note in the PR: run <code>cargo run -p fluid-server</code> and <code>pnpm dev</code>, create fluid-coding itself from its folder.</li>
+</ol>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/design/project-create-one-field.md">docs/design/project-create-one-field.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — a local workbench for reviewing agent-written code.</span><nav class="footer-links" aria-label="Footer navigation"><a class="footer-docs" href="/fluid-coding-site/docs/">Documentation</a><a href="https://github.com/badetitou/fluid-coding">GitHub ↗</a></nav></div></footer></body></html>

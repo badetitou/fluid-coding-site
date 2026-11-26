@@ -1,0 +1,116 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ADR-0032 — Local task statuses and file persistence · fluid-coding</title><meta name="description" content="- Status: proposed"><meta property="og:title" content="ADR-0032 — Local task statuses and file persistence · fluid-coding"><meta property="og:description" content="- Status: proposed"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> ADR-0032 — Local task statuses and file persistence</nav><article class="prose"><h1 id="adr-0032--local-task-statuses-and-file-persistence">ADR-0032 — Local task statuses and file persistence</h1>
+<ul>
+<li>Status: proposed</li>
+<li>Date: 2026-11-26</li>
+<li>Deciders: Benoit (to validate)</li>
+<li>Amends: <a href="/fluid-coding-site/docs/decisions/ADR-0011-task-tracking/">ADR-0011</a> (status set, local writes)</li>
+</ul>
+<h2 id="context">Context</h2>
+<p><a href="/fluid-coding-site/docs/decisions/ADR-0011-task-tracking/">ADR-0011</a> fixed four statuses (<code>todo | in_progress | in_review | done</code>)
+mirroring <code>board.py</code> and left local writes in memory. Dogfooding shows three defects:</p>
+<ul>
+<li><code>.claude/issues/1-demo-videos.md</code> has <code>status: parked</code>. <code>TaskStatus::parse</code>
+(<code>crates/fluid-core/src/tasks/model.rs</code>) accepts only <code>todo</code>, <code>in-progress|inprogress|in progress</code>,
+<code>in-review|inreview|in review</code> and <code>done|closed</code>; <code>parse_local_markdown</code> returns
+<code>TaskError::UnknownStatus</code>, <code>fluid-index/src/tasks.rs</code> drops the file with a warning, so
+<code>GET /api/tasks</code> returns <code>[]</code> and the warning surfaces only in <code>/api/health</code>.</li>
+<li><code>create_task</code> and <code>patch_task</code> (<code>crates/fluid-server/src/routes/tasks.rs</code>) only <code>upsert</code> into the
+in-memory store: <code>POST /api/tasks</code> returned <code>local:1</code> and wrote no file. The number comes from
+<code>TaskStore::next_local_number</code> (max of the <em>loaded</em> tasks + 1), so <code>local:1</code> collides with the
+dropped <code>parked</code> file.</li>
+<li>Writing uses <code>serialize_local_markdown</code>, which emits only the board field set: unknown frontmatter
+keys of a hand-written issue would be lost on the first save.</li>
+</ul>
+<p>The external convention is <code>badetitou-team</code> <code>local-flow/scripts/board.py</code> (0.6.1):
+<code>STATUSES = ["todo", "in-progress", "in-review", "done"]</code>, <code>move</code> rejects any other status, issues
+with another status are listed on stderr as <code>unknown status</code>, new ids are <code>max(ids) + 1</code>, and <code>new</code>
+creates the directory with <code>mkdir(parents=True, exist_ok=True)</code>. <code>parked</code> is therefore already outside
+that convention: it was written by hand.</p>
+<h2 id="decision">Decision</h2>
+<ol>
+<li><strong>Canonical statuses</strong> are <code>todo | in-progress | in-review | blocked | done</code> in frontmatter and
+<code>todo | in_progress | in_review | blocked | done</code> on the wire. <code>blocked</code> ranks between <code>in_review</code>
+and <code>done</code> for sorting; <code>nextStatus</code> on the board skips it (blocking is an explicit move).</li>
+<li><strong>Read aliases</strong> (case-insensitive, <code>_</code> and spaces folded to <code>-</code>): <code>inprogress</code>, <code>in progress</code> →
+<code>in-progress</code>; <code>inreview</code>, <code>in review</code>, <code>review</code> → <code>in-review</code>; <code>closed</code> → <code>done</code>;
+<code>parked</code>, <code>on-hold</code>, <code>waiting</code> → <code>blocked</code>.</li>
+<li><strong>Write canonical only.</strong> fluid-coding never writes an alias. A file keeps its original status
+token until its status is changed through fluid: an edit of title, body or labels rewrites the
+other fields and leaves <code>status: parked</code> as it is. The original token is carried in memory next to
+the task (not on the wire). Unknown frontmatter keys are preserved in their original order. Zero
+data loss is the invariant: load → save without a status change is byte-stable for the status line.</li>
+<li><strong>Unknown status keeps the task visible.</strong> A task with an unrecognised status loads as <code>todo</code>
+with a parse warning naming the file and the token; its token is preserved as in rule 3. Dropping
+the task (today’s behaviour) is rejected because it hides work and causes number collisions.</li>
+<li><strong>Numbering</strong> = <code>max(number of every local issue file under every repo's .claude/issues/, including files that failed to parse but have an </code><n>-<code>filename prefix or an</code>id:<code>) + 1</code>, computed
+from disk at creation time under the store’s write lock. The in-memory counter is never the source.
+File name: <code>&lt;n&gt;-&lt;slug&gt;.md</code>, slug from the title as in <code>board.py</code>.</li>
+<li><strong>Atomic write.</strong> Serialize, write to <code>.claude/issues/.&lt;n&gt;-&lt;slug&gt;.md.tmp</code> in the same directory,
+<code>fsync</code>, then <code>rename</code> over the target. A failed write returns a typed <code>ApiError</code> and leaves the
+in-memory store unchanged (the store is updated after the rename succeeds).</li>
+<li><strong>Directory policy.</strong> <code>.claude/issues/</code> is created (<code>create_dir_all</code>) on the first local task
+creation, in the active project’s primary repo (first repo by key, as the loader orders them).
+Loading never creates it; a missing directory is not a warning.</li>
+<li><strong>The store is a cache.</strong> The in-memory <code>TaskStore</code> is reloaded from disk on start and refreshed
+after each local write; disk wins on conflict.</li>
+<li><strong>Forge tasks stay read-only</strong> for status and fields, as <code>patch_task</code> already enforces
+(<code>connected forge issues are read-only</code>). <code>blocked</code> is not mapped to any forge label in this ADR;
+GitHub/GitLab snapshots never produce it.</li>
+<li><strong>Parse warnings reach the tasks API.</strong> Additive route <code>GET /api/tasks/warnings</code> returns
+<code>[{ path, message }]</code> (Rust struct, generated TS, fixture). <code>GET /api/tasks</code> keeps returning
+<code>Task[]</code> so no client breaks. The board shows a warning strip when the list is non-empty.
+<code>/api/health</code> keeps its copy.</li>
+</ol>
+<h2 id="what-may-ship-before-acceptance">What may ship before acceptance</h2>
+<p>Not a boundary change (implementable now, W2 tasks 1–5): file persistence for create/patch,
+disk-based numbering, atomic write, directory creation, store-as-cache, preservation of unknown keys
+and of the original status token, typed write errors, <code>GET /api/tasks/warnings</code>, and rule 4 with the
+<em>current</em> four statuses (an unknown token such as <code>parked</code> loads as <code>todo</code> with a warning).</p>
+<p>Waits for acceptance (W2 task 6): adding <code>blocked</code> to <code>TaskStatus</code>, the alias table, zod
+<code>taskStatusSchema</code>, <code>fixtures/contracts/tasks.json</code>, the board column, and the migration below.</p>
+<h2 id="implied-changes-after-acceptance">Implied changes (after acceptance)</h2>
+<ul>
+<li><code>fluid-core</code>: <code>TaskStatus::Blocked</code> (<code>label</code> “Blocked”, <code>frontmatter</code> “blocked”,
+<code>gitlab_label</code> <code>None</code>), aliases, round-trip tests for every alias and for token preservation.</li>
+<li><code>packages/contracts/src/tasks.ts</code>: <code>taskStatusSchema</code> gains <code>blocked</code>; <code>taskStatusLabels</code> too.</li>
+<li><code>fixtures/contracts/tasks.json</code>: one task with <code>"status": "blocked"</code>, tested in Rust and Vitest.</li>
+<li><code>apps/web/src/lib/tasks.ts</code>: <code>taskStatuses</code> and <code>groupByStatus</code> gain a Blocked column; the mock data
+and <code>styles.css</code> status colour follow.</li>
+<li><code>badetitou-team</code> <code>board.py</code>: add <code>blocked</code> to <code>STATUSES</code> (out-of-repo; until then <code>board.py</code> lists a
+<code>blocked</code> issue as <code>unknown status</code> but does not lose it).</li>
+</ul>
+<h2 id="migration">Migration</h2>
+<p><code>1-demo-videos.md</code>: rewrite <code>status: parked</code> to <code>status: blocked</code> explicitly in the same PR as the
+vocabulary change, with a note in the issue’s Result section. Its acceptance criteria are all checked
+and STATUS.md calls it done; the user parked it deliberately. If the user prefers, <code>done</code> is the
+other valid migration; that choice is part of validating this ADR. No other local issue exists.</p>
+<h2 id="consequences">Consequences</h2>
+<p>Positive:</p>
+<ul>
+<li>The board shows every local issue; collisions with hidden files disappear.</li>
+<li>Created and moved tasks survive a restart and are plain committed files, as ADR-0006 requires.</li>
+<li>Hand-written issues and future board.py fields are not erased by fluid.</li>
+</ul>
+<p>Negative:</p>
+<ul>
+<li>A fifth status diverges from <code>board.py</code> until that script is updated.</li>
+<li>Token preservation adds a small amount of state beside <code>Task</code> that is not on the wire.</li>
+<li>Two concurrent writers (fluid and <code>board.py</code>) can still race on the number; the window is one
+creation and the loser gets a duplicate-key warning, not data loss.</li>
+</ul>
+<h2 id="alternatives-considered">Alternatives considered</h2>
+<ul>
+<li><strong>Keep <code>parked</code> as its own status.</strong> Rejected by default: a sixth column for one file, and
+“parked” and “blocked” both mean “not moving, not done”. Valid if the user wants to distinguish a
+deliberate deferral from an external blocker.</li>
+<li><strong>Map <code>parked</code> to <code>todo</code> or <code>done</code>.</strong> Rejected as an alias: it changes meaning silently. <code>done</code> is
+acceptable only as an explicit one-file migration.</li>
+<li><strong>Rewrite aliases to canonical on any save.</strong> Rejected: it edits a field the user did not touch and
+breaks the zero-loss invariant.</li>
+<li><strong>Drop unknown statuses (current behaviour).</strong> Rejected: hides work and corrupts numbering.</li>
+<li><strong>Envelope <code>{ tasks, warnings }</code> on <code>GET /api/tasks</code>.</strong> Rejected for now: breaking contract change
+for every client; the additive route gives the same information.</li>
+<li><strong>In-memory counter or a <code>.fluid-coding/</code> sequence file.</strong> Rejected: the files are the truth; a
+separate counter drifts when issues are added by hand or by <code>board.py</code>.</li>
+</ul>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/decisions/ADR-0032-local-task-status-and-persistence.md">docs/decisions/ADR-0032-local-task-status-and-persistence.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — a local workbench for reviewing agent-written code.</span><nav class="footer-links" aria-label="Footer navigation"><a class="footer-docs" href="/fluid-coding-site/docs/">Documentation</a><a href="https://github.com/badetitou/fluid-coding">GitHub ↗</a></nav></div></footer></body></html>

@@ -52,8 +52,9 @@ result through <code>DemoFields</code>; otherwise it converts the demo fixture t
 feed the existing <code>build_matrix</code>, <code>analyze_impact</code>, <code>TagIndex::from_tags</code> and <code>TaskStore::from_tasks</code>
 calls unchanged.</p>
 <p><code>GET /api/health</code> exposes <code>dataSource</code> (<code>real</code> or <code>demo</code>), <code>generation</code> (<code>real:&lt;project.id&gt;</code> for a
-configured project), <code>projectId</code> and the indexer <code>warnings</code>. The status bar shows that source and
-the warning count, so a mock run is never mistaken for work on real code.</p>
+configured project), <code>projectId</code> and the indexer <code>warnings</code>. The expandable status panel shows that
+source, while the status bar shows the warning count, so a mock run is never mistaken for work on
+real code.</p>
 <h2 id="use-a-real-agent-and-a-trustcheckpoint-flow">Use a real agent and a trust/checkpoint flow</h2>
 <p>Agents connect through <code>AgentPort</code> (<code>fake</code>, <code>opencode</code>, <code>claude-code</code>) and the same MCP tools; there
 is no private tool loop. Open a task brief, ask the agent for a change, review the proposed hunks,

@@ -1,0 +1,103 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ADR-0030 — Local API origin and Host policy · fluid-coding</title><meta name="description" content="- Status: accepted"><meta property="og:title" content="ADR-0030 — Local API origin and Host policy · fluid-coding"><meta property="og:description" content="- Status: accepted"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> ADR-0030 — Local API origin and Host policy</nav><article class="prose"><h1 id="adr-0030--local-api-origin-and-host-policy">ADR-0030 — Local API origin and Host policy</h1>
+<ul>
+<li>Status: accepted</li>
+<li>Date: 2026-11-26</li>
+<li>Deciders: Benoit (accepted by the orchestrator on his behalf)</li>
+</ul>
+<h2 id="context">Context</h2>
+<p>The local server is bound to loopback only: <code>fluid-server</code> reads <code>FLUID_ADDR</code> (default
+<code>127.0.0.1:4200</code>) and refuses a non-loopback address (<code>crates/fluid-server/src/main.rs:16-20</code>);
+the desktop CLI binds <code>127.0.0.1</code> on <code>--port</code> (default 4200) and tries the next 19 ports if busy
+(<code>crates/fluid-cli/src/server.rs:16-30</code>, <code>crates/fluid-cli/src/args.rs:12</code>). The resolved port is
+exported as <code>FLUID_OTLP_PORT</code> (<code>crates/fluid-cli/src/main.rs:45</code>) and read back by
+<code>telemetry::env::endpoint_port()</code>, which falls back to <code>FLUID_ADDR</code>, then 4200.</p>
+<p>Loopback binding does not protect against the browser. The router is wrapped in
+<code>CorsLayer::permissive()</code> (<code>crates/fluid-server/src/lib.rs:58</code>). Verified with curl:</p>
+<ul>
+<li><code>OPTIONS /api/settings/general</code> with <code>Origin: https://evil.example</code> answers
+<code>access-control-allow-origin: *</code> and <code>access-control-allow-methods: *</code>, so any web page the user
+visits may call the API and read the answer.</li>
+<li><code>GET /api/health</code> with <code>Host: evil.example:4200</code> answers 200 with repository data: a DNS-rebinding
+page can talk to the server as a same-origin client.</li>
+</ul>
+<p>The API mutates the repository and runs processes: <code>POST /api/edits/{id}/apply</code>,
+<code>POST /api/checkpoints/{id}/restore</code>, <code>PATCH /api/settings/general</code> (sets the agent command line),
+<code>POST /api/agents/{id}/run</code>, and <code>/api/forge/*</code> (forge tokens and issue creation). A “simple”
+cross-origin POST is executed even when the browser later hides its response.</p>
+<p>How the UI is loaded: the macOS shell builds <code>http://127.0.0.1:&lt;bound port&gt;</code>
+(<code>crates/fluid-cli/src/main.rs:41</code>) and opens it in a wry WKWebView with <code>.with_url(url)</code>
+(<code>crates/fluid-cli/src/native.rs:109</code>). There is no custom scheme; the desktop origin is the server
+origin itself. Other platforms open the same URL in the default browser (<code>main.rs:65</code>). In
+development, Vite serves the UI on <code>http://127.0.0.1:4100</code> and proxies <code>/api</code> to
+<code>http://127.0.0.1:4200</code> without <code>changeOrigin</code> (<code>apps/web/vite.config.ts:8-10</code>), so proxied
+requests keep <code>Host: 127.0.0.1:4100</code> and browser requests carry <code>Origin: http://127.0.0.1:4100</code>.</p>
+<h2 id="decision">Decision</h2>
+<p>A new module <code>crates/fluid-server/src/security.rs</code> owns one pure policy plus one axum middleware.
+<code>lib.rs</code> replaces <code>CorsLayer::permissive()</code> with it; handlers in <code>routes/</code> are not touched. The
+port <code>P</code> is the bound port, passed to <code>demo_app(port)</code>; the CLI builds the router after it binds.</p>
+<ol>
+<li><strong>Allowed origins</strong> (exact, scheme + host + port):
+<ul>
+<li><code>http://127.0.0.1:P</code>, <code>http://localhost:P</code>, <code>http://[::1]:P</code>. The desktop WKWebView uses the
+first, so it needs no extra entry.</li>
+<li>Development origins from <code>FLUID_DEV_ORIGINS</code>, a comma-separated list of exact origins (for
+example <code>FLUID_DEV_ORIGINS=http://127.0.0.1:4100,http://localhost:4100</code>). Empty by default;
+never hard-coded. Malformed entries are ignored with a <code>tracing</code> warning.</li>
+</ul>
+</li>
+<li><strong>CORS</strong>: a <code>CorsLayer</code> with an <code>AllowOrigin::predicate</code> over the allowed origins, explicit methods and
+headers, no credentials. A foreign <code>Origin</code> gets no <code>access-control-allow-origin</code> header.</li>
+<li><strong>Host validation</strong>: the <code>Host</code> header must be <code>127.0.0.1:P</code>, <code>localhost:P</code> or <code>[::1]:P</code>, or the
+<code>host:port</code> of a <code>FLUID_DEV_ORIGINS</code> entry (needed for the Vite proxy). Anything else, including
+a missing <code>Host</code> or a loopback name on another port, gets <code>403</code> before routing. This closes DNS
+rebinding.</li>
+<li><strong>Unsafe methods</strong>: a request whose method is not <code>GET</code>, <code>HEAD</code> or <code>OPTIONS</code> and that carries an
+<code>Origin</code> not in the list gets <code>403</code> without reaching the handler, even though the browser would
+have blocked the response. <code>Origin: null</code> is treated as foreign.</li>
+<li><strong>No <code>Origin</code></strong>: requests without <code>Origin</code> (curl, scripts, agent CLIs) pass the origin check;
+they are not browser cross-origin requests. Host validation still applies. This is what keeps
+<code>POST /_telemetry/v1/traces</code> working: provider SDKs post OTLP JSON to
+<code>http://127.0.0.1:P/_telemetry/v1/traces</code> with a loopback <code>Host</code> and no <code>Origin</code>. A test covers
+it explicitly.</li>
+<li><strong>Static files</strong> (<code>fallback_service</code>) go through the same Host check; they are <code>GET</code>, so the
+origin rule does not apply to them.</li>
+<li><strong>Tests first</strong>, in <code>fluid-server</code>: foreign <code>Origin</code> → no allow-origin header; foreign <code>Host</code> →
+403; foreign-<code>Origin</code> POST → 403 and handler not called; allowed origin → normal answer and
+header; dev origin via <code>FLUID_DEV_ORIGINS</code> → accepted; OTLP POST without <code>Origin</code> → accepted.
+The policy is a pure function over (method, host, origin, port, dev list) and is unit-tested.</li>
+</ol>
+<h2 id="consequences">Consequences</h2>
+<p>Positive:</p>
+<ul>
+<li>Any web page, and any DNS-rebinding page, loses read and write access to the local API.</li>
+<li>The desktop shell and the built web UI keep working unchanged: they are same-origin.</li>
+<li>One small module, no change to route handlers, no new dependency (<code>tower-http</code> already provides
+<code>CorsLayer</code>).</li>
+</ul>
+<p>Negative and not covered:</p>
+<ul>
+<li>Development behind <code>pnpm dev</code>: the Vite proxy sets <code>changeOrigin: true</code>, so the <code>Host</code> the server
+sees is its own and GETs work. Browser writes still carry <code>Origin: http://127.0.0.1:4100</code>, so
+<code>cargo run -p fluid-server</code> needs <code>FLUID_DEV_ORIGINS=http://127.0.0.1:4100</code> (or the <code>localhost</code>
+form); without it every write from the dev UI gets 403. Docs must say so.</li>
+<li>The port <code>P</code> is passed explicitly by the process that binds (<code>demo_app(port)</code>), never read from
+inherited environment such as <code>FLUID_OTLP_PORT</code>; the CLI therefore builds the router after the bind.</li>
+<li>Local processes on the same machine are trusted: any process that can open a loopback socket can
+call the API with no <code>Origin</code> and a loopback <code>Host</code>. That includes other users’ processes on a
+shared machine.</li>
+<li>There is no authentication. A per-launch bearer token (generated by the CLI, injected into the
+WKWebView and the spawned agents’ environment, required on mutating routes) is the likely next
+step and would need its own ADR.</li>
+<li>Browser extensions and native apps that forge headers are out of scope.</li>
+<li>If the port changes at runtime (it does not today), the cached <code>P</code> must be refreshed.</li>
+</ul>
+<h2 id="alternatives-considered">Alternatives considered</h2>
+<ul>
+<li><strong>Keep <code>CorsLayer::permissive()</code> and rely on loopback binding.</strong> Rejected: proven exploitable from
+any web page through CORS and DNS rebinding.</li>
+<li><strong>Custom URL scheme for the desktop shell.</strong> Rejected for now: the shell works with plain
+loopback HTTP and a scheme would add a second origin to allow without removing the first.</li>
+<li><strong>Token-only protection.</strong> Deferred: it does not stop DNS rebinding reads of unauthenticated GETs
+unless every route requires it; Host validation is needed either way.</li>
+</ul>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/decisions/ADR-0030-local-api-origin-policy.md">docs/decisions/ADR-0030-local-api-origin-policy.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — a local workbench for reviewing agent-written code.</span><nav class="footer-links" aria-label="Footer navigation"><a class="footer-docs" href="/fluid-coding-site/docs/">Documentation</a><a href="https://github.com/badetitou/fluid-coding">GitHub ↗</a></nav></div></footer></body></html>

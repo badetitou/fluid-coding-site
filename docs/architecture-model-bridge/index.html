@@ -32,8 +32,12 @@ range when known; otherwise the relation is asserted without a site.</li>
 <p><code>analyze</code>, <code>analyze_with_depth</code> and <code>analyze_with_seeds</code> delegate cycles to
 <code>model_analysis::Cycle</code> and impact to <code>model_analysis::Propagation</code> with <code>Direction::Callers</code>,
 <code>Calls</code> + <code>References</code> edges and depth 3 by default. Results are sorted by key so two runs on the
-same graph are byte-for-byte identical. <code>ModelAnalysis</code> carries <code>cycles</code>, <code>cyclicEntities</code>,
-<code>impact</code> (<code>key</code>, <code>distance</code>, <code>direction</code>), <code>entityCount</code>, <code>relationCount</code> and <code>warnings</code>.</p>
+same graph are byte-for-byte identical. <code>ModelAnalysis</code> carries <code>cycles</code> (components of two or more entities), <code>cyclicEntities</code>,
+<code>selfCalls</code> / <code>selfCallCount</code> (single-entity components, kept apart because name-resolved call
+edges produce many false self-calls), <code>propagation</code> (<code>key</code>, <code>distance</code>, <code>direction</code>), <code>degrees</code>
+(top fan-in + fan-out rows), <code>unused</code> / <code>unusedCount</code> (isolated source entities, capped),
+<code>entityCount</code>, <code>relationCount</code> and <code>warnings</code>. <code>GET /api/model/analysis</code> serves it with the
+index <code>generation</code>, computed once per generation.</p>
 <p>Seeds come from the changed symbols supplied by the caller (<code>Changed::symbols</code> or
 <code>ImpactRequest::changed_symbols</code>). <code>CodeGraph</code> itself has no change set, so <code>analyze</code> and
 <code>analyze_with_depth</code> use the documented fallback: entities with no parent. Unknown seed keys are

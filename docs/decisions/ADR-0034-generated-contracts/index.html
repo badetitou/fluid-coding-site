@@ -1,0 +1,129 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ADR-0034 — TypeScript contracts are generated from Rust wire structs · fluid-coding</title><meta name="description" content="- Status: proposed"><meta property="og:title" content="ADR-0034 — TypeScript contracts are generated from Rust wire structs · fluid-coding"><meta property="og:description" content="- Status: proposed"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> ADR-0034 — TypeScript contracts are generated from Rust wire structs</nav><article class="prose"><h1 id="adr-0034--typescript-contracts-are-generated-from-rust-wire-structs">ADR-0034 — TypeScript contracts are generated from Rust wire structs</h1>
+<ul>
+<li>Status: proposed</li>
+<li>Date: 2026-11-26</li>
+<li>Deciders: Benoit</li>
+</ul>
+<h2 id="context">Context</h2>
+<p>AGENTS.md rule 6 says wire types are Rust structs with serde, TypeScript types are generated, and zod
+validates only untrusted input. Today none of that is generated:</p>
+<ul>
+<li><code>packages/contracts/src/</code> holds 16 hand-written zod modules (~2,200 lines, ~190 exported
+schemas): agents 26, mcp-tools 27, forge 21, project 18, setup 15, tasks 13, code-graph 13,
+edit 12, session-graph 10, settings 8, tags/language-provider/workspace 7, change-brief 5,
+theme 3. Every TS type is <code>z.infer&lt;typeof …Schema&gt;</code>, so the schema <em>is</em> the type.</li>
+<li>The Rust side has ~150 <code>Serialize</code> structs/enums: ~130 in <code>fluid-core</code> (tasks, plugins/edit,
+plugins/forge, plugins/agent, sessions, setup, projects, session_graph, matrix, impact, tags…),
+~19 in <code>fluid-server</code> (settings model/view, projects, forge device flow, some route DTOs) and 4
+in <code>fluid-index</code>. Drift between the two sides is caught only where a fixture exists.</li>
+<li><code>fixtures/contracts/</code> has 10 files. All are parsed in <code>fixtures.test.ts</code>/domain tests on the TS
+side; only 4 (chat-sessions, project, setup, session-graph) are also read by Rust tests via
+<code>include_str!</code>. matrix, impact, tags, tasks, forge and change-brief are TS-only.</li>
+<li>Serde usage that a generator must honour: <code>rename_all = "camelCase"</code> (most types, plus
+<code>lowercase</code> ×10, <code>snake_case</code> ×10, <code>kebab-case</code> ×1), <code>default</code> (~180), <code>default + skip_serializing_if</code> (68), one internally tagged enum (<code>setup/types.rs</code>, <code>tag = "mode"</code>), one
+<code>untagged</code> enum (<code>TagValue</code>), one <code>flatten</code> (server <code>routes/miller.rs</code>), 6 <code>serde_json::Value</code>
+fields and 25 <code>u64</code>/<code>i64</code>/<code>usize</code> fields.</li>
+<li><code>apps/web/src/api/*</code> parses every response with zod (~45 <code>parse</code> calls). The server is ours, but
+the desktop shell has served a stale web bundle against a newer server (fixed in 3e2cb08), and a
+dev server may be a different build: responses are a real process boundary.</li>
+<li><code>fluid-core</code> must stay pure and build for <code>wasm32-unknown-unknown</code>; <code>fluid-wasm</code> returns JSON
+strings of the same core structs.</li>
+</ul>
+<h2 id="decision">Decision</h2>
+<ol>
+<li><strong>Tool: <code>ts-rs</code>.</strong> It is the most used and longest-maintained serde→TS generator, emits plain
+<code>.ts</code> type declarations (no runtime), reads serde attributes (<code>rename_all</code>, <code>rename</code>, <code>tag</code>,
+<code>untagged</code>, <code>flatten</code>, <code>skip</code>, <code>default</code>) and exports from <code>cargo test</code> without a bin. Integer
+fields default to <code>bigint</code>; we set <code>#[ts(type = "number")]</code> on the 25 wide-integer fields (all
+are counts, sizes or issue numbers well below 2^53). <code>Option&lt;T&gt;</code> with <code>skip_serializing_if</code>
+becomes <code>field?: T</code> via <code>#[ts(optional)]</code>; <code>serde_json::Value</code> maps to <code>JsonValue</code>.</li>
+<li><strong>Derives live next to the struct, behind a cargo feature <code>ts</code></strong> in each crate that owns wire
+types (<code>fluid-core</code>, <code>fluid-server</code>, <code>fluid-index</code> only if needed):
+<code>ts-rs = { workspace = true, optional = true }</code>, <code>[features] ts = ["dep:ts-rs"]</code>,
+<code>#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]</code>. Without the feature nothing is
+compiled, so default builds, the wasm check and <code>fluid-wasm</code> are unchanged. ts-rs has no runtime
+I/O; the file writes happen only in the generated <code>export_bindings_*</code> tests.</li>
+<li><strong>Output: <code>packages/contracts/src/generated/</code></strong>, one file per type, committed, header
+<code>// generated by ts-rs — do not edit</code>, re-exported from <code>src/generated/index.ts</code> (written by the
+gen script). Hand-written modules import types from there; <code>index.ts</code> keeps its public names.</li>
+<li><strong>Command: <code>pnpm contracts:gen</code></strong> (root script) runs <code>node scripts/contracts-gen.mjs</code>, which:
+empties <code>generated/</code>, runs <code>TS_RS_EXPORT_DIR=packages/contracts/src/generated cargo test --features fluid-core/ts,fluid-server/ts export_bindings</code>, writes the barrel <code>index.ts</code> in sorted
+order, and runs <code>pnpm --filter @fluid-coding/contracts typecheck</code>. Output is deterministic.</li>
+<li><strong>CI drift check:</strong> a step in the Rust job of <code>ci.yml</code> runs <code>pnpm contracts:gen</code> then
+<code>git diff --exit-code -- packages/contracts/src/generated</code>. A struct change without regenerated
+types fails CI.</li>
+<li><strong>“zod only for untrusted input”, concretely.</strong>
+<ul>
+<li><em>Untrusted</em> = data entering TS from outside the bundle: HTTP/SSE responses read in
+<code>apps/web/src/api</code>, <code>localStorage</code>, URL params, user-typed forms, pasted/imported JSON, and
+the JSON strings returned by <code>fluid-wasm</code>. These keep a zod schema.</li>
+<li><em>Trusted</em> = values built in TS and passed between modules, request bodies we construct, props.
+These use the generated type only; no <code>schema.parse</code> on our own outgoing request bodies.</li>
+<li>Types are never derived from zod again: no <code>z.infer</code> exports. Each schema is checked against
+the generated type: <code>export const taskSchema = z.object({…}) satisfies z.ZodType&lt;Task&gt;;</code> plus
+one type test per domain, <code>expectTypeOf&lt;z.output&lt;typeof taskSchema&gt;&gt;().toEqualTypeOf&lt;Task&gt;()</code>,
+so the schema cannot be looser or stricter than the Rust struct.</li>
+<li>Response schemas stay in <code>packages/contracts</code>, not in features, and are parsed once per
+request in <code>apps/web/src/api</code> (no re-parse downstream).</li>
+</ul>
+</li>
+<li><strong>Fixtures on both sides.</strong> Every file in <code>fixtures/contracts/</code> is deserialized <em>and</em>
+re-serialized in a Rust test (round-trip equality via <code>serde_json::Value</code>) in the crate that
+owns the struct, and parsed by the matching zod schema in TS. The 6 TS-only fixtures gain Rust
+tests in their domain PR.</li>
+<li><strong>Migration, one PR per domain</strong>, each: add derives, regenerate, rewrite the zod module against
+the generated types, delete hand-written duplicate types, add the Rust fixture test, update
+<code>docs/contracts/</code> if an invariant changed.
+<ul>
+<li>PR 0 — tooling: workspace dep, <code>ts</code> features, <code>contracts:gen</code>, CI drift step, one pilot type
+(<code>theme</code>), ADR status → accepted.</li>
+<li>PR 1 — <strong>tasks</strong>, after W2 merges (ADR-0032 may change the status vocabulary; generating
+first would mean doing it twice).</li>
+<li>PR 2 — <strong>edits</strong> (<code>plugins/edit.rs</code>, patches/checkpoints).</li>
+<li>PR 3 — <strong>agents</strong> (<code>plugins/agent.rs</code>, sessions, chat-sessions fixture), after W6 (MCP) lands.</li>
+<li>PR 4 — <strong>forge</strong> (<code>plugins/forge.rs</code> + <code>fluid-server/src/forge</code>).</li>
+<li>PR 5 — <strong>settings</strong> (<code>fluid-server/src/settings</code>).</li>
+<li>The W5 <strong>analysis</strong> contract is not migrated: W5 lands first and its follow-up is generated
+from day one in PR 0’s tooling (or, if W5 lands after PR 0, W5 uses derives directly).</li>
+<li>Later, same pattern: setup, project, session-graph, matrix/impact/code-graph, tags,
+change-brief, language-provider, workspace. <code>mcp-tools.ts</code> (tool input schemas, i.e.
+untrusted agent input) stays zod and is reviewed separately.</li>
+</ul>
+</li>
+</ol>
+<h2 id="consequences">Consequences</h2>
+<p>Positive:</p>
+<ul>
+<li>Rust is the single source of wire shapes; TS drift becomes a CI failure, not a runtime surprise.</li>
+<li>zod shrinks to the boundary: one schema per response type, pinned to the generated type.</li>
+<li>Every shared fixture is exercised by both serializers, as AGENTS.md already demands.</li>
+<li>Default and wasm builds carry no new dependency.</li>
+</ul>
+<p>Negative:</p>
+<ul>
+<li>Every wire struct carries a <code>cfg_attr</code> line, and some fields need <code>#[ts(...)]</code> hints (wide
+integers, optional fields, <code>Value</code>). Forgetting <code>ts(optional)</code> yields <code>T | null</code> instead of
+<code>T?</code> — caught by the type-equality test, not by Rust.</li>
+<li>Generating needs a Rust toolchain; a TS-only contributor must run <code>pnpm contracts:gen</code>.</li>
+<li>zod schemas are still hand-written for response types; the <code>satisfies</code> + <code>toEqualTypeOf</code> pair
+keeps them honest but is duplication that remains.</li>
+<li>Generated <code>.ts</code> files add diff noise to contract PRs.</li>
+</ul>
+<h2 id="alternatives-considered">Alternatives considered</h2>
+<ul>
+<li><strong>specta (+ specta-typescript).</strong> Better integration story with Tauri/rspc and fine serde support,
+but v2 spent a long time in release candidates with API churn, refuses <code>u64</code> unless configured,
+and needs an explicit export bin/test listing types. ts-rs’s per-type <code>#[ts(export)]</code> fits our
+“small modules, add a test” style. Revisit if we adopt rspc-style typed procedures.</li>
+<li><strong>schemars → JSON Schema → zod (json-schema-to-zod).</strong> Would also generate the validators, but
+adds two lossy hops, produces large zod for tagged/untagged enums, ships validators for trusted
+data, and conflicts with “zod only for untrusted input”.</li>
+<li><strong>Hand-written TS types with fixture tests only.</strong> Status quo; drift is caught only where a
+fixture exists (4 of 10 on the Rust side).</li>
+<li><strong>Drop runtime validation of responses (cast to the generated type).</strong> Rejected for now: the
+stale-bundle case is real. Large payloads (matrix, session graph) can revisit this with a
+measured budget in <code>docs/quality/performance.md</code>.</li>
+<li><strong>Derives unconditionally (no feature).</strong> Simpler, but adds a proc-macro to every build including
+wasm and <code>fluid-wasm</code>; the feature costs one <code>cfg_attr</code> per type.</li>
+</ul>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/decisions/ADR-0034-generated-contracts.md">docs/decisions/ADR-0034-generated-contracts.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — a local workbench for reviewing agent-written code.</span><nav class="footer-links" aria-label="Footer navigation"><a class="footer-docs" href="/fluid-coding-site/docs/">Documentation</a><a href="https://github.com/badetitou/fluid-coding">GitHub ↗</a></nav></div></footer></body></html>

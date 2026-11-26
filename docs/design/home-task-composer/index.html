@@ -1,0 +1,216 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Home — task composer bar · fluid-coding</title><meta name="description" content="Status: revision 2, after the first adversarial review (REJECT, 15 findings — all addressed below)."><meta property="og:title" content="Home — task composer bar · fluid-coding"><meta property="og:description" content="Status: revision 2, after the first adversarial review (REJECT, 15 findings — all addressed below)."><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> Home — task composer bar</nav><article class="prose"><h1 id="home--task-composer-bar">Home — task composer bar</h1>
+<p>Status: revision 2, after the first adversarial review (REJECT, 15 findings — all addressed below).
+Extends <a href="/fluid-coding-site/docs/design/home-now/"><code>home-now.md</code></a>. Decision record: <a href="/fluid-coding-site/docs/decisions/ADR-0035-task-intake-chat/">ADR-0035</a>.</p>
+<h2 id="purpose">Purpose</h2>
+<p>Home becomes the fastest place to create a task for the active project. A full-width bar, shaped like
+the agent dock’s composer, takes one sentence. The Fluid Agent asks follow-ups if needed and proposes a
+draft issue with sub-tasks; the user confirms with one click. The bar never writes a task on its own.</p>
+<p>It is not a second agent: it reuses <code>POST /api/tasks/intake</code> (ADR-0035) and <code>POST /api/tasks</code>.</p>
+<h2 id="placement">Placement</h2>
+<ul>
+<li>Directly under the Home header, above the Now grid, full width of <code>.now-page</code> (max 1320 px).</li>
+<li>Rendered in every Home branch (loading, error, loaded). The composer hook is called before NowPage’s
+early return, so typed text survives the first <code>/api/now</code> response.</li>
+<li>Mock mode (<code>api.mode === 'mock'</code>): the textarea is disabled with the placeholder
+“Needs the server: run with VITE_API_MODE=server” and the status line says “Needs the server”.</li>
+</ul>
+<h2 id="look">Look</h2>
+<ul>
+<li>Same shell as the dock composer (bordered panel, textarea, round send button, mono status line),
+using a Home class <code>home-composer-bar</code> with <code>margin: 0</code> so it aligns with the grid, not the dock’s
+12 px margin.</li>
+<li>No mode tabs. Two rows of textarea by default.</li>
+<li>Status line: <code>Creates in &lt;project&gt; · ⌘ Enter</code>.</li>
+<li>Placeholder: “Describe a task for this project…”.</li>
+<li>Phone width (375 px): full width with the page gutter; the draft card stacks its buttons.</li>
+</ul>
+<h2 id="state-machine-pure-reducer-pagesnowtaskcomposerts">State machine (pure reducer, <code>pages/now/taskComposer.ts</code>)</h2>
+<p>Phases: <code>idle</code> → <code>asking</code> → <code>proposed</code> → <code>creating</code> → <code>idle</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>From</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>input</td>
+<td>any</td>
+<td><code>input</code> updated</td>
+</tr>
+<tr>
+<td>send</td>
+<td><code>idle</code>/<code>proposed</code>, text non-empty, server online</td>
+<td>phase <code>asking</code>; user turn appended; <code>request</code> += 1</td>
+</tr>
+<tr>
+<td>send</td>
+<td><code>asking</code>/<code>creating</code>/mock</td>
+<td>ignored (single-flight)</td>
+</tr>
+<tr>
+<td>intake-ok (same request)</td>
+<td><code>asking</code></td>
+<td>assistant turn appended; draft = reply draft (null clears it); phase <code>proposed</code> or <code>idle</code></td>
+</tr>
+<tr>
+<td>intake-ok (older request)</td>
+<td>any</td>
+<td>ignored (stale after Discard)</td>
+</tr>
+<tr>
+<td>intake-fail (same request)</td>
+<td><code>asking</code></td>
+<td>the message is restored into the input only if nothing new was typed; its user turn dropped; error shown; phase <code>proposed</code> if a draft existed, else <code>idle</code></td>
+</tr>
+<tr>
+<td>create</td>
+<td><code>proposed</code> with a draft</td>
+<td>phase <code>creating</code>; both draft buttons disabled</td>
+</tr>
+<tr>
+<td>create-ok</td>
+<td><code>creating</code></td>
+<td>transcript and draft cleared; notice “Created local:14 in the local board.” with <strong>Open the board</strong></td>
+</tr>
+<tr>
+<td>create-fail, nothing created</td>
+<td><code>creating</code></td>
+<td>phase back to <code>proposed</code>; draft kept; error shown (retry or discard)</td>
+</tr>
+<tr>
+<td>create-fail, parent created, sub-task failed</td>
+<td><code>creating</code></td>
+<td>transcript and draft cleared; error “Created local:14, but a sub-task failed: …”; the Board is refreshed so the parent is visible</td>
+</tr>
+<tr>
+<td>discard</td>
+<td>any except <code>creating</code></td>
+<td>transcript and draft cleared; <code>request</code> += 1 (in-flight reply becomes stale); typed input kept</td>
+</tr>
+</tbody>
+</table>
+<p>Single-flight is enforced twice: the reducer refuses a send that is not allowed, and the hook reads a
+ref updated synchronously, so two sends in the same tick cannot both reach the API.</p>
+<p>Partial creation: the Board’s sub-task loop already leaves a parent behind when a sub-task fails. The
+design does <strong>not</strong> retry only the missing sub-tasks (more states for a rare failure); the composer
+reports the parent and drops the draft, so a retry cannot duplicate the parent. The user creates the
+missing sub-tasks on the Board. This is the trade-off to confirm.</p>
+<h2 id="interaction">Interaction</h2>
+<ul>
+<li><strong>Send</strong>: the send button or ⌘/Ctrl + Enter (same as the dock). A plain Enter inserts a newline.</li>
+<li><strong>Reply</strong>: the last 6 turns show above the bar in an <code>aria-live="polite"</code> log.</li>
+<li><strong>Draft card</strong> (<code>section</code> “Proposed task”): title, first 3 non-empty body lines, first 5 sub-tasks
+then “+N more”, the line “Target: resolved on create (connected forge, else local board)” (the
+intake reply does not carry the resolved target, so the card says the rule, not a value), and two
+buttons: <strong>Discard</strong> and <strong>Create task</strong>.</li>
+<li><strong>Focus</strong>: when a draft arrives, focus moves to the draft card heading (<code>tabIndex=-1</code>); after Create or Discard the card unmounts and focus returns to the textarea.</li>
+<li><strong>Asking timeout</strong>: none in v1. The intake runs the agent CLI, so it can be slow; while asking the
+bar shows “•••” and the user can click <strong>Discard</strong>, which ignores the late reply. Listed as an open
+point.</li>
+</ul>
+<h2 id="data-and-contracts">Data and contracts</h2>
+<ul>
+<li>No new endpoint, contract or Rust change.</li>
+<li>Intake: <code>api.intakeTask(messages)</code>. Server errors come through as the message: a missing provider
+gives the server’s “the Fluid Agent is not available” text, which tells the user to pick a provider in
+Settings. A non-conforming reply is a typed 400 from the server.</li>
+<li>Create: <code>createTaskWithSubtasks(api, draft, subtasks)</code> in <code>lib/taskCreation.ts</code>, extracted from
+<code>useTasksBoard.create</code>. The Board keeps its behaviour: <code>refresh</code>, select the new key, notice, close the
+form. One change: on <code>SubtaskCreationError</code> the Board also refreshes and selects the parent, so the
+parent is no longer invisible. The composer calls <code>onCreated</code> (refetch Home); the Board refetches on mount.</li>
+<li>Source: <code>auto</code>, the Board’s default.</li>
+</ul>
+<h2 id="errors">Errors</h2>
+<ul>
+<li>Intake failure: one line above the bar, the message is restored into the input, nothing is lost.</li>
+<li>Create failure: one line under the draft card, as in the table above.</li>
+<li>An empty reply or missing title is a server error, never a silent draft.</li>
+</ul>
+<h2 id="components-agentsmd-rule-8--150-lines--7-props">Components (AGENTS.md rule 8: ≤ 150 lines, ≤ 7 props)</h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>components/now/TaskComposer.tsx</code></td>
+<td>the bar: transcript, draft slot, error, textarea, send. Props: <code>controller</code>, <code>projectName</code></td>
+</tr>
+<tr>
+<td><code>components/now/TaskDraftCard.tsx</code></td>
+<td>draft preview with Discard / Create. Props: <code>draft</code>, <code>busy</code>, <code>onCreate</code>, <code>onDiscard</code></td>
+</tr>
+<tr>
+<td><code>pages/now/taskComposer.ts</code></td>
+<td>pure reducer, selectors and presentation helpers</td>
+</tr>
+<tr>
+<td><code>pages/now/useTaskComposer.ts</code></td>
+<td>effects: calls the API, dispatches results, owns the ref</td>
+</tr>
+<tr>
+<td><code>lib/taskCreation.ts</code></td>
+<td><code>createTaskWithSubtasks</code> and <code>SubtaskCreationError</code>, shared with the Board</td>
+</tr>
+</tbody>
+</table>
+<h2 id="tests">Tests</h2>
+<ul>
+<li>
+<p><code>pages/now/composerRunner.test.ts</code>: the runner without React: same-tick double send, create to notice and onCreated, stale reply after Discard, sub-task failure, mock mode.</p>
+</li>
+<li>
+<p><code>pages/now/taskComposer.test.ts</code>: the transition table above, including double send, stale reply after
+Discard, failed intake restores input, withdrawn draft, parent-created failure, refusal of Discard
+while creating.</p>
+</li>
+<li>
+<p><code>lib/taskCreation.test.ts</code>: checklist body, child tasks for local, forge without children, parent
+failure passes through, sub-task failure carries the parent.</p>
+</li>
+<li>
+<p>Board wiring: covered by the existing <code>useTasksBoard</code> consumers and the helper test; no new hook test
+(the hook only forwards to the reducer and the helper).</p>
+</li>
+</ul>
+<h2 id="accessibility">Accessibility</h2>
+<ul>
+<li>
+<p>The transcript <code>ol</code> is always mounted (empty state hidden with CSS), so the live region exists before the first message.</p>
+</li>
+<li>
+<p>Enter during IME composition never sends.</p>
+</li>
+<li>
+<p>Draft buttons are enabled only in <code>proposed</code>.</p>
+</li>
+<li>
+<p>Textarea <code>aria-label="Describe a task for this project"</code>; send button <code>aria-label</code> “Send” or “Sending”.</p>
+</li>
+<li>
+<p>Draft card labelled “Proposed task”; errors <code>role="alert"</code>; the created notice <code>role="status"</code>.</p>
+</li>
+</ul>
+<h2 id="out-of-scope-v1">Out of scope (v1)</h2>
+<ul>
+<li>Inline editing of the draft; use the Board form.</li>
+<li>Choosing a target on Home (<code>auto</code> only).</li>
+<li>Retrying only the failed sub-tasks.</li>
+<li>Transcript persistence across reloads (in memory only).</li>
+<li>Starting work from the composer.</li>
+<li>Asking timeout (Discard is the escape).</li>
+</ul>
+<h2 id="open-points">Open points</h2>
+<ul>
+<li>Send key: ⌘/Ctrl + Enter, to match the dock. Plain Enter would be faster for one-liners; decided to
+keep one shortcut across both bars.</li>
+<li>Partial creation: drop the draft and report, versus retrying the missing sub-tasks. Chosen: report.</li>
+<li>Asking timeout: none in v1 (Discard only).</li>
+</ul>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/design/home-task-composer.md">docs/design/home-task-composer.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — a local workbench for reviewing agent-written code.</span><nav class="footer-links" aria-label="Footer navigation"><a class="footer-docs" href="/fluid-coding-site/docs/">Documentation</a><a href="https://github.com/badetitou/fluid-coding">GitHub ↗</a></nav></div></footer></body></html>
