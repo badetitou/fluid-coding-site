@@ -1,0 +1,59 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ADR-0029 — Start Work runs the Fluid Agent in a task worktree · fluid-coding</title><meta name="description" content="- Status: accepted"><meta property="og:title" content="ADR-0029 — Start Work runs the Fluid Agent in a task worktree · fluid-coding"><meta property="og:description" content="- Status: accepted"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> ADR-0029 — Start Work runs the Fluid Agent in a task worktree</nav><article class="prose"><h1 id="adr-0029--start-work-runs-the-fluid-agent-in-a-task-worktree">ADR-0029 — Start Work runs the Fluid Agent in a task worktree</h1>
+<ul>
+<li>Status: accepted</li>
+<li>Date: 2026-11-26</li>
+<li>Deciders: Benoit</li>
+</ul>
+<h2 id="context">Context</h2>
+<p>The Tasks board’s <strong>Start work</strong> button only created or switched to the task’s branch. That
+guarded the one-issue-one-branch flow from <a href="/fluid-coding-site/docs/decisions/ADR-0011-task-tracking/">ADR-0011</a>, but it also
+refused to run whenever the main checkout had uncommitted changes — the normal state while dogfooding
+the app. The user wants the button to hand the selected task’s brief to the configured agent, not to
+return <code>the working tree has uncommitted changes; commit or stash them before starting a task</code>.</p>
+<p>Agents already run behind one <code>AgentPort</code> (<a href="/fluid-coding-site/docs/decisions/ADR-0024-fluid-agent-selected-provider/">ADR-0024</a>),
+and the CLI adapter accepts a working directory. Patch apply/checkpoint restore, however, resolve
+paths against the active project’s workspace root.</p>
+<h2 id="decision">Decision</h2>
+<ol>
+<li><code>POST /api/tasks/{key}/start</code> creates or reuses an isolated git worktree for the task’s branch at
+<code>.fluid-coding/worktrees/&lt;sanitized-key&gt;-&lt;fingerprint&gt;/</code> inside the active repo. It never checks
+out a branch in the main workspace and never stashes user work. The index layer owns the git
+write; the core stays pure.</li>
+<li>The server builds a deterministic handoff prompt from <code>make_brief</code> (<code>handoff_prompt</code> in
+<code>fluid-core</code>) and passes it with the brief to the <code>fluid</code> agent, which follows the provider
+selected in Settings → General. The agent process runs with the worktree as its cwd.</li>
+<li>The run is recorded like any other agent turn: durable chat session plus session analysis entry.
+Proposed patches are registered with the edit plugin and carry a worktree root, so apply and
+checkpoint restore target that worktree. The Tasks board announces the run and opens the agent
+dock on its conversation.</li>
+<li>Local tasks move to <code>in_progress</code> and record their branch after a successful start. Remote issues
+stay read-only; their normalized snapshot is unchanged.</li>
+</ol>
+<h2 id="consequences">Consequences</h2>
+<p>Positive:</p>
+<ul>
+<li>Uncommitted work in the main checkout no longer blocks a task, and the agent sees a clean tree.</li>
+<li>Reusing the same worktree for a task keeps repeated starts idempotent and preserves agent-written
+files between runs.</li>
+<li>One <code>AgentPort</code> and one brief generator serve both the dock and task starts; no second tool loop.</li>
+<li>Patch review stays reversible: checkpoints capture the worktree’s prior contents.</li>
+</ul>
+<p>Negative:</p>
+<ul>
+<li>Worktrees consume extra disk and leave git metadata under the main repo’s <code>.git/worktrees</code>; they
+are not removed automatically when a task is done.</li>
+<li>A branch already checked out in another worktree makes the start fail with a typed git error.</li>
+<li>The agent’s cwd is the task worktree, while the Code/Monaco page still shows the main checkout;
+users must open the worktree path to see files the agent wrote directly.</li>
+<li>Existing unregistered patch proposals from older runs still apply to the main workspace.</li>
+</ul>
+<h2 id="alternatives-considered">Alternatives considered</h2>
+<ul>
+<li><strong>Auto-stash then switch branch.</strong> Rejected: restoring a stash over files an agent may have
+changed is easy to get wrong, and silent stashing hides user work.</li>
+<li><strong>Run in the main checkout without a branch.</strong> Rejected: the agent would mix its changes with
+unrelated uncommitted work and break ADR-0011’s review unit.</li>
+<li><strong>Keep the current branch-only button and add a separate agent button.</strong> Rejected: the board would
+expose two overlapping handoffs and the same dirty-tree failure would remain.</li>
+</ul>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/decisions/ADR-0029-start-work-task-worktree.md">docs/decisions/ADR-0029-start-work-task-worktree.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — a local workbench for reviewing agent-written code.</span><nav class="footer-links" aria-label="Footer navigation"><a class="footer-docs" href="/fluid-coding-site/docs/">Documentation</a><a href="https://github.com/badetitou/fluid-coding">GitHub ↗</a></nav></div></footer></body></html>

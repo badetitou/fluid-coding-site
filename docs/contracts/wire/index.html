@@ -300,6 +300,11 @@ account creates a real issue there and normalizes the response into the same <co
 <p>The same types back three read-only MCP tools: <code>list_tasks</code> (filtered task list), <code>get_task</code> (one
 normalized task) and <code>task_brief</code> (deterministic handoff with optional files/commands/rules). Write
 tools stay absent from MCP; agent patches go through the edit routes below under explicit trust.</p>
+<p><code>POST /tasks/{key}/start?files=…&amp;commands=…&amp;rules=…</code> builds the brief, creates or reuses a git
+worktree at <code>.fluid-coding/worktrees/&lt;sanitized-key&gt;-&lt;fingerprint&gt;/</code>, and runs the Fluid Agent from
+General settings with that worktree as its working directory. It returns <code>{ branch, created, reused, worktree, conversationId, agent, messages }</code>; the conversation is also stored under
+<code>.fluid-coding/sessions/</code>, so the dock can reopen it. Patch proposals from that run are registered
+with the edit plugin and apply/restore inside the same worktree, never in the dirty main checkout.</p>
 <h2 id="edits-and-checkpoints">Edits and checkpoints</h2>
 <p><code>packages/contracts/src/edit.ts</code> mirrors <code>fluid_core::plugins::edit</code>. A <code>PatchProposal</code> has an
 optional blank <code>id</code> (assigned by the server), a <code>taskKey</code>, a summary and at least one <code>FilePatch</code>. A
