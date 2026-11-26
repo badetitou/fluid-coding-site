@@ -1,0 +1,47 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ADR-0027 — Local GenAI trace model from OTLP spans · fluid-coding</title><meta name="description" content="- Status: accepted"><meta property="og:title" content="ADR-0027 — Local GenAI trace model from OTLP spans · fluid-coding"><meta property="og:description" content="- Status: accepted"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> ADR-0027 — Local GenAI trace model from OTLP spans</nav><article class="prose"><h1 id="adr-0027--local-genai-trace-model-from-otlp-spans">ADR-0027 — Local GenAI trace model from OTLP spans</h1>
+<ul>
+<li>Status: accepted</li>
+<li>Date: 2026-11-26</li>
+</ul>
+<h2 id="context">Context</h2>
+<p>Durable dock sessions under <code>.fluid-coding/sessions/</code> record successful runs, but not tool calls,
+timings or subagents. A user can reopen a conversation and still cannot answer “what did the agent do,
+in which order, and where did the time go?”. Provider CLIs can already export OpenTelemetry GenAI
+semantic-convention spans, so the missing piece is a local receiver and a normalized model, not a new
+instrumentation of every adapter by hand.</p>
+<p>Reading the native databases of opencode or Claude Code would couple the workbench to private,
+unstable schemas and to a second tool loop. The workbench only needs a stable local wire contract.</p>
+<h2 id="decision">Decision</h2>
+<ul>
+<li>The Rust server exposes a loopback-only OTLP/HTTP JSON receiver at <code>POST /_telemetry/v1/traces</code>. It
+accepts <code>ExportTraceServiceRequest</code>, caps the body at 2 MiB, caps raw attributes at 64 keys and
+256 characters per value, and never forwards telemetry externally. CLI adapters inject the
+endpoint into the spawned provider process through OTLP environment variables.</li>
+<li>Pin a subset of the GenAI semantic conventions: <code>invoke_agent</code>, <code>chat</code>, <code>execute_tool</code>, <code>transfer</code>,
+<code>plan</code> and <code>exception</code>, with provider-specific <code>operation</code> values preserved verbatim. Adapters
+normalize provider variants into one <code>TraceSpan</code>/<code>TraceSession</code>/<code>SessionTrace</code> model; raw
+attributes are kept capped and sorted for deterministic output.</li>
+<li><code>fluid-core</code> owns the trace types and the pure, deterministic <code>build_session_graph</code>. It performs no
+I/O, reads no clock and awaits nothing; the server supplies ingestion and storage.</li>
+<li>Spans are appended atomically to <code>.fluid-coding/traces/&lt;safeConversationId&gt;.jsonl</code>, which is
+gitignored. Trace files are telemetry, not repository source of truth.</li>
+<li>Correlation uses <code>traceparent</code> first, then conversation/session id plus time window when the trace
+context is missing. Unknown session ids yield empty sessions, not a 500.</li>
+<li>Content capture is opt-in and off by default. Metadata only is stored by default; prompts, tool
+args and results are represented by a <code>contentRef</code> when enabled.</li>
+<li>No native opencode or Claude Code database reads in v1.</li>
+</ul>
+<h2 id="consequences">Consequences</h2>
+<ul>
+<li>GenAI semconv is Development status, so the pinned subset can change. Variation is absorbed in
+adapters, never in routes or in the React client.</li>
+<li>Traces stay local and gitignored; no external collector is contacted. Opt-in content capture keeps
+the default run private.</li>
+<li>The shared fixture is parsed by Rust tests and by the contracts package, so a drift in the pinned
+subset is caught on both sides.</li>
+<li>Future OTLP export or retroactive import of older traces is an additive adapter behind the same
+model; it does not require a new agent tool loop.</li>
+<li>The normalizations and the graph builder need tests; the performance gates for a 10k-span graph are
+recorded in <a href="/fluid-coding-site/docs/quality/performance/">the budget doc</a> and are not measured yet.</li>
+</ul>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/decisions/ADR-0027-genai-trace-model.md">docs/decisions/ADR-0027-genai-trace-model.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — a local workbench for reviewing agent-written code.</span><nav class="footer-links" aria-label="Footer navigation"><a class="footer-docs" href="/fluid-coding-site/docs/">Documentation</a><a href="https://github.com/badetitou/fluid-coding">GitHub ↗</a></nav></div></footer></body></html>

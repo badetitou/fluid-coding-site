@@ -1,0 +1,135 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Session analysis — shared contract (frozen for v1) · fluid-coding</title><meta name="description" content="Read AGENTS.md, STATUS.md, docs/architecture.md, docs/quality/performance.md and"><meta property="og:title" content="Session analysis — shared contract (frozen for v1) · fluid-coding"><meta property="og:description" content="Read AGENTS.md, STATUS.md, docs/architecture.md, docs/quality/performance.md and"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> Session analysis — shared contract (frozen for v1)</nav><article class="prose"><h1 id="session-analysis--shared-contract-frozen-for-v1">Session analysis — shared contract (frozen for v1)</h1>
+<p>Read <code>AGENTS.md</code>, <code>STATUS.md</code>, <code>docs/architecture.md</code>, <code>docs/quality/performance.md</code> and
+<code>docs/contracts/wire.md</code> before starting. Rust structs are the source of truth; TypeScript mirrors
+by hand and a shared fixture is the drift alarm. This contract is frozen: if it looks wrong, report
+it, do not silently change it in your track.</p>
+<h2 id="decisions-locked-with-the-user">Decisions locked with the user</h2>
+<ul>
+<li>Source: instrument local agent runs with OpenTelemetry GenAI semantic conventions. The Rust server
+exposes a <strong>loopback-only OTLP/HTTP JSON</strong> receiver; the CLI adapters inject the endpoint into the
+spawned provider process. No read of opencode/Claude native databases in v1.</li>
+<li>Storage: <code>.fluid-coding/traces/&lt;safeConversationId&gt;.jsonl</code>, gitignored, append-only, atomic writes.</li>
+<li>Placement: a <strong>dedicated lazy route</strong> <code>/analysis?ids=&lt;id1,id2&gt;</code> under <code>Shell</code>,
+opened from Agents (single session and multi-select). No new primary nav item.</li>
+<li>Rendering: <code>@xyflow/react</code> v13 (React Flow 13), lazy-loaded, v13 CSS in the lazy chunk.</li>
+<li>Sub-agents: nested spans become <strong>expandable parent groups</strong> in the same canvas, with breadcrumbs.</li>
+<li>Tool calls: consecutive <code>execute_tool</code> spans between two turns become <strong>one arrow</strong> per segment;
+stroke width + colour intensity encode <code>callCount</code>; click expands into bounded pages of nodes.</li>
+<li>Content (prompts, tool args/results) is <strong>opt-in</strong>, default off. Metadata only by default.</li>
+<li>GenAI semconv is Development status: pin this subset, keep raw attributes capped and sorted.</li>
+</ul>
+<h2 id="frozen-rust-contract--fluid-coresrcsession_graphrs">Frozen Rust contract — <code>fluid-core/src/session_graph.rs</code></h2>
+<p>All wire structs use <code>#[serde(rename_all = "camelCase")]</code>. Deterministic <code>Vec</code>/<code>BTreeMap</code> only.</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="rust"><code><span class="line"><span style="color:#B392F0">TokenUsage</span><span style="color:#E1E4E8"> { input</span><span style="color:#F97583">:</span><span style="color:#B392F0"> u64</span><span style="color:#E1E4E8">, output</span><span style="color:#F97583">:</span><span style="color:#B392F0"> u64</span><span style="color:#E1E4E8">, cache_read</span><span style="color:#F97583">:</span><span style="color:#B392F0"> u64</span><span style="color:#E1E4E8"> }</span></span>
+<span class="line"><span style="color:#B392F0">SpanAttribute</span><span style="color:#E1E4E8"> { key</span><span style="color:#F97583">:</span><span style="color:#B392F0"> String</span><span style="color:#E1E4E8">, value</span><span style="color:#F97583">:</span><span style="color:#B392F0"> String</span><span style="color:#E1E4E8"> }</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">TraceSpan</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">  span_id</span><span style="color:#F97583">:</span><span style="color:#B392F0"> String</span><span style="color:#E1E4E8">, parent_span_id</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Option</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">String</span><span style="color:#E1E4E8">&gt;, trace_id</span><span style="color:#F97583">:</span><span style="color:#B392F0"> String</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  conversation_id</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Option</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">String</span><span style="color:#E1E4E8">&gt;, session_id</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Option</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">String</span><span style="color:#E1E4E8">&gt;,</span></span>
+<span class="line"><span style="color:#E1E4E8">  operation</span><span style="color:#F97583">:</span><span style="color:#B392F0"> String</span><span style="color:#E1E4E8">, name</span><span style="color:#F97583">:</span><span style="color:#B392F0"> String</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  agent_name</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Option</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">String</span><span style="color:#E1E4E8">&gt;, provider_name</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Option</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">String</span><span style="color:#E1E4E8">&gt;,</span></span>
+<span class="line"><span style="color:#E1E4E8">  start_ms</span><span style="color:#F97583">:</span><span style="color:#B392F0"> i64</span><span style="color:#E1E4E8">, end_ms</span><span style="color:#F97583">:</span><span style="color:#B392F0"> i64</span><span style="color:#E1E4E8">, duration_ms</span><span style="color:#F97583">:</span><span style="color:#B392F0"> u64</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  tokens</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Option</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">TokenUsage</span><span style="color:#E1E4E8">&gt;, error_type</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Option</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">String</span><span style="color:#E1E4E8">&gt;,</span></span>
+<span class="line"><span style="color:#E1E4E8">  tool_name</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Option</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">String</span><span style="color:#E1E4E8">&gt;, tool_call_id</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Option</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">String</span><span style="color:#E1E4E8">&gt;,</span></span>
+<span class="line"><span style="color:#E1E4E8">  content_ref</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Option</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">String</span><span style="color:#E1E4E8">&gt;, attributes</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Vec</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">SpanAttribute</span><span style="color:#E1E4E8">&gt;,</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">TraceSession</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">  id</span><span style="color:#F97583">:</span><span style="color:#B392F0"> String</span><span style="color:#E1E4E8">, title</span><span style="color:#F97583">:</span><span style="color:#B392F0"> String</span><span style="color:#E1E4E8">, agent</span><span style="color:#F97583">:</span><span style="color:#B392F0"> String</span><span style="color:#E1E4E8">, provider</span><span style="color:#F97583">:</span><span style="color:#B392F0"> String</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  conversation_id</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Option</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">String</span><span style="color:#E1E4E8">&gt;, start_ms</span><span style="color:#F97583">:</span><span style="color:#B392F0"> i64</span><span style="color:#E1E4E8">, end_ms</span><span style="color:#F97583">:</span><span style="color:#B392F0"> i64</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">SessionTrace</span><span style="color:#E1E4E8"> { sessions</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Vec</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">TraceSession</span><span style="color:#E1E4E8">&gt;, spans</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Vec</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">TraceSpan</span><span style="color:#E1E4E8">&gt; }</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">GraphOptions</span><span style="color:#E1E4E8"> { max_nodes</span><span style="color:#F97583">:</span><span style="color:#B392F0"> usize</span><span style="color:#E1E4E8">, max_calls_per_batch</span><span style="color:#F97583">:</span><span style="color:#B392F0"> usize</span><span style="color:#E1E4E8">, expanded</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Vec</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">String</span><span style="color:#E1E4E8">&gt; }</span></span>
+<span class="line"><span style="color:#6A737D">// Default: max_nodes = 300, max_calls_per_batch = 8, expanded = vec![]</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">GraphNode</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">  id</span><span style="color:#F97583">:</span><span style="color:#B392F0"> String</span><span style="color:#E1E4E8">, kind</span><span style="color:#F97583">:</span><span style="color:#B392F0"> String</span><span style="color:#E1E4E8">, label</span><span style="color:#F97583">:</span><span style="color:#B392F0"> String</span><span style="color:#E1E4E8">, session_id</span><span style="color:#F97583">:</span><span style="color:#B392F0"> String</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  span_id</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Option</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">String</span><span style="color:#E1E4E8">&gt;, parent_id</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Option</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">String</span><span style="color:#E1E4E8">&gt;,</span></span>
+<span class="line"><span style="color:#E1E4E8">  depth</span><span style="color:#F97583">:</span><span style="color:#B392F0"> u32</span><span style="color:#E1E4E8">, lane</span><span style="color:#F97583">:</span><span style="color:#B392F0"> u32</span><span style="color:#E1E4E8">, x</span><span style="color:#F97583">:</span><span style="color:#B392F0"> f64</span><span style="color:#E1E4E8">, y</span><span style="color:#F97583">:</span><span style="color:#B392F0"> f64</span><span style="color:#E1E4E8">, width</span><span style="color:#F97583">:</span><span style="color:#B392F0"> f64</span><span style="color:#E1E4E8">, height</span><span style="color:#F97583">:</span><span style="color:#B392F0"> f64</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  duration_ms</span><span style="color:#F97583">:</span><span style="color:#B392F0"> u64</span><span style="color:#E1E4E8">, tokens</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Option</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">TokenUsage</span><span style="color:#E1E4E8">&gt;,</span></span>
+<span class="line"><span style="color:#E1E4E8">  expandable</span><span style="color:#F97583">:</span><span style="color:#B392F0"> bool</span><span style="color:#E1E4E8">, expanded</span><span style="color:#F97583">:</span><span style="color:#B392F0"> bool</span><span style="color:#E1E4E8">, children</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Vec</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">String</span><span style="color:#E1E4E8">&gt;,</span></span>
+<span class="line"><span style="color:#E1E4E8">  content_ref</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Option</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">String</span><span style="color:#E1E4E8">&gt;, error_type</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Option</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">String</span><span style="color:#E1E4E8">&gt;,</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">GraphEdge</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">  id</span><span style="color:#F97583">:</span><span style="color:#B392F0"> String</span><span style="color:#E1E4E8">, source</span><span style="color:#F97583">:</span><span style="color:#B392F0"> String</span><span style="color:#E1E4E8">, target</span><span style="color:#F97583">:</span><span style="color:#B392F0"> String</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  call_count</span><span style="color:#F97583">:</span><span style="color:#B392F0"> u32</span><span style="color:#E1E4E8">, total_duration_ms</span><span style="color:#F97583">:</span><span style="color:#B392F0"> u64</span><span style="color:#E1E4E8">, avg_duration_ms</span><span style="color:#F97583">:</span><span style="color:#B392F0"> u64</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  error_count</span><span style="color:#F97583">:</span><span style="color:#B392F0"> u32</span><span style="color:#E1E4E8">, intensity</span><span style="color:#F97583">:</span><span style="color:#B392F0"> f64</span><span style="color:#E1E4E8">, label</span><span style="color:#F97583">:</span><span style="color:#B392F0"> String</span><span style="color:#E1E4E8">, tool_names</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Vec</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">String</span><span style="color:#E1E4E8">&gt;,</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">GraphStats</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">  node_count</span><span style="color:#F97583">:</span><span style="color:#B392F0"> usize</span><span style="color:#E1E4E8">, edge_count</span><span style="color:#F97583">:</span><span style="color:#B392F0"> usize</span><span style="color:#E1E4E8">, tool_call_count</span><span style="color:#F97583">:</span><span style="color:#B392F0"> u32</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  total_duration_ms</span><span style="color:#F97583">:</span><span style="color:#B392F0"> u64</span><span style="color:#E1E4E8">, dropped_nodes</span><span style="color:#F97583">:</span><span style="color:#B392F0"> u32</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">SessionGraph</span><span style="color:#E1E4E8"> { sessions</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Vec</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">TraceSession</span><span style="color:#E1E4E8">&gt;, nodes</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Vec</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">GraphNode</span><span style="color:#E1E4E8">&gt;, edges</span><span style="color:#F97583">:</span><span style="color:#B392F0"> Vec</span><span style="color:#E1E4E8">&lt;</span><span style="color:#B392F0">GraphEdge</span><span style="color:#E1E4E8">&gt;, stats</span><span style="color:#F97583">:</span><span style="color:#B392F0"> GraphStats</span><span style="color:#E1E4E8"> }</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">pub</span><span style="color:#F97583"> fn</span><span style="color:#B392F0"> build_session_graph</span><span style="color:#E1E4E8">(trace</span><span style="color:#F97583">:</span><span style="color:#F97583"> &amp;</span><span style="color:#B392F0">SessionTrace</span><span style="color:#E1E4E8">, options</span><span style="color:#F97583">:</span><span style="color:#F97583"> &amp;</span><span style="color:#B392F0">GraphOptions</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">-&gt;</span><span style="color:#B392F0"> SessionGraph</span><span style="color:#E1E4E8">;</span></span></code></pre>
+<p><code>kind</code> values: <code>session</code>, <code>turn</code>, <code>toolBatch</code>, <code>tool</code>, <code>subagent</code>, <code>exception</code>, <code>message</code>.
+<code>operation</code> values from GenAI semconv: <code>invoke_agent</code>, <code>chat</code>, <code>execute_tool</code>, <code>transfer</code>, <code>plan</code>,
+<code>exception</code>, or a provider-specific string preserved verbatim.</p>
+<h2 id="frozen-typescript-mirror">Frozen TypeScript mirror</h2>
+<p><code>packages/contracts/src/session-graph.ts</code> exports zod schemas with the same camelCase fields:
+<code>tokenUsageSchema</code>, <code>spanAttributeSchema</code>, <code>traceSpanSchema</code>, <code>traceSessionSchema</code>,
+<code>sessionTraceSchema</code>, <code>graphOptionsSchema</code>, <code>graphNodeSchema</code>, <code>graphEdgeSchema</code>, <code>graphStatsSchema</code>,
+<code>sessionGraphSchema</code>, plus inferred <code>type</code> aliases with the PascalCase names above. Re-export all
+of them from <code>packages/contracts/src/index.ts</code>.</p>
+<p>Fixture: <code>fixtures/contracts/session-graph.json</code> — one <code>SessionTrace</code> with a parent session, one
+subagent, three consecutive tool spans and one error span. Parsed by Rust tests <strong>and</strong>
+<code>packages/contracts/src/fixtures.test.ts</code>.</p>
+<h2 id="frozen-http-surfaces">Frozen HTTP surfaces</h2>
+<ul>
+<li><code>GET /api/session-analysis?ids=&lt;id1,id2&gt;&amp;expand=&lt;spanId1,spanId2&gt;</code> → <code>SessionGraph</code>.
+One request for the whole selection (no N+1). <code>ids</code> required, max 20, validated with the same id
+rules as chat sessions. Unknown ids produce sessions with no spans, not a 500.</li>
+<li><code>POST /_telemetry/v1/traces</code> → 200/204. OTLP/HTTP JSON <code>ExportTraceServiceRequest</code>, max 2 MiB,
+loopback only, no external forwarding. Cap raw attributes at 64 keys and values at 256 chars.</li>
+<li>Web client: <code>fetchSessionAnalysis(ids: string[], expand: string[]): Promise&lt;SessionGraph&gt;</code> in
+<code>apps/web/src/api/coding.ts</code>, validated with <code>sessionGraphSchema</code>.</li>
+</ul>
+<h2 id="settings-additions">Settings additions</h2>
+<p><code>sessionTracing: boolean</code> default <code>true</code>; <code>captureGenAiContent: boolean</code> default <code>false</code>.
+Mirrored in the settings zod contract, Rust settings model and General settings UI.</p>
+<h2 id="ownership-matrix--do-not-edit-another-tracks-files">Ownership matrix — do not edit another track’s files</h2>
+<table>
+<thead>
+<tr>
+<th>Track</th>
+<th>Owns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>01 core + contracts</td>
+<td><code>crates/fluid-core/**</code>, <code>packages/contracts/**</code>, <code>fixtures/contracts/session-graph.json</code>, <code>docs/contracts/session-graph.md</code>, <code>Cargo.toml</code>/<code>Cargo.lock</code> for a criterion dev-dep only</td>
+</tr>
+<tr>
+<td>02 server + OTLP</td>
+<td><code>crates/fluid-server/**</code>, <code>crates/fluid-cli/**</code> if needed, settings contract fields only if not owned by 01 (coordinate: settings zod schema is owned by 01; 02 may edit Rust settings model and ask 01 for the zod field)</td>
+</tr>
+<tr>
+<td>03 web canvas</td>
+<td><code>apps/web/**</code>, <code>pnpm-lock.yaml</code>, <code>apps/web/package.json</code></td>
+</tr>
+<tr>
+<td>04 docs</td>
+<td><code>docs/decisions/ADR-0027-*.md</code>, <code>docs/decisions/ADR-0028-*.md</code>, <code>docs/architecture.md</code>, <code>docs/quality/performance.md</code></td>
+</tr>
+</tbody>
+</table>
+<p>Final integration (<code>STATUS.md</code>, full gates, dogfood note) is done by the orchestrator after all
+four tracks report back.</p>
+<h2 id="integration-rules">Integration rules</h2>
+<ul>
+<li>Cross-track imports may not compile until the owning track lands. Write code against the frozen
+contract; report blocked checks instead of creating stubs or touching another track’s files.</li>
+<li>Keep Rust modules ≤300 lines, React components ≤150 lines and ≤7 props, pure logic in <code>model.ts</code>
+with colocated tests. No <code>any</code>, no panic in request paths.</li>
+<li>Run the narrowest checks for your track: <code>cargo test -p fluid-core</code>,
+<code>cargo check -p fluid-core --target wasm32-unknown-unknown</code>, <code>cargo test -p fluid-server</code>,
+<code>pnpm --filter @fluid-coding/contracts test</code>, <code>pnpm --filter @fluid-coding/web typecheck</code>.
+Full workspace gates are for final integration only.</li>
+</ul>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/plans/session-analysis/00-shared-contract.md">docs/plans/session-analysis/00-shared-contract.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — a local workbench for reviewing agent-written code.</span><nav class="footer-links" aria-label="Footer navigation"><a class="footer-docs" href="/fluid-coding-site/docs/">Documentation</a><a href="https://github.com/badetitou/fluid-coding">GitHub ↗</a></nav></div></footer></body></html>

@@ -1,0 +1,45 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ADR-0028 — Render session analysis with a lazy React Flow canvas · fluid-coding</title><meta name="description" content="- Status: accepted"><meta property="og:title" content="ADR-0028 — Render session analysis with a lazy React Flow canvas · fluid-coding"><meta property="og:description" content="- Status: accepted"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> ADR-0028 — Render session analysis with a lazy React Flow canvas</nav><article class="prose"><h1 id="adr-0028--render-session-analysis-with-a-lazy-react-flow-canvas">ADR-0028 — Render session analysis with a lazy React Flow canvas</h1>
+<ul>
+<li>Status: accepted</li>
+<li>Date: 2026-11-26</li>
+</ul>
+<h2 id="context">Context</h2>
+<p>The user wants to zoom, drag nodes, collapse chat turns and expand subagent groups in one canvas.
+The structure map uses a custom canvas because it has its own cells and interaction model, but a
+session graph adds viewport transforms, hit-testing, port edges, parent groups and selection. Drawing
+that from scratch would reimplement what a graph-viewport library already provides, and would put
+graph semantics in React against the performance rules.</p>
+<h2 id="decision">Decision</h2>
+<ul>
+<li>Use <code>@xyflow/react</code> v13 (React Flow 13) for the analysis surface. It is imported only from the lazy
+<code>/analysis?ids=...</code> route under <code>Shell</code>, together with its v13 stylesheet; it is never an eager
+import in the coding shell. There is no new primary nav item: Agents opens the route for one
+session or a multi-selection.</li>
+<li>React Flow supplies the viewport, dragging and hit-testing. Nodes and edges are custom components:
+<code>session</code>, <code>turn</code>, <code>toolBatch</code>, <code>tool</code>, <code>subagent</code>, <code>exception</code> and <code>message</code> nodes, with nested
+spans as expandable parent groups and breadcrumbs. Consecutive <code>execute_tool</code> spans between two
+turns collapse into one arrow per segment; stroke width and colour intensity encode <code>callCount</code>,
+and clicking expands bounded pages of underlying nodes.</li>
+<li>Layout is computed once in the pure <code>fluid-core</code> builder: positions, sizes, lanes and expansion
+state arrive on <code>GraphNode</code>. The client renders that result and never recomputes graph semantics.</li>
+<li>One <code>GET /api/session-analysis?ids=...&amp;expand=...</code> request serves the whole selection; the web
+client validates the response with the shared zod schema.</li>
+<li>Keep React Flow’s default attribution (no Pro), import its CSS only in the lazy module, and layer
+app styles explicitly so the late stylesheet does not override shell tokens.</li>
+<li>Use <code>onlyRenderVisibleElements</code> and memoized node/edge components; URL state carries the selected
+ids and expanded span ids.</li>
+</ul>
+<h2 id="consequences">Consequences</h2>
+<ul>
+<li>The React Flow chunk is expected at roughly 64–86 KiB gzip (estimate, not measured yet) and stays
+outside the 150 KiB initial JS budget. The exact size is recorded in the PR when the chunk lands.</li>
+<li>A 300-visible-node canvas must hold 60 fps pan/zoom; the gate and its Playwright rAF trace are in
+<a href="/fluid-coding-site/docs/quality/performance/">the budget doc</a> and are not measured yet.</li>
+<li>Custom nodes and edges keep the canvas free of domain logic, but the v13 CSS import order needs a
+visual check in both the dev server and the installed app.</li>
+<li>Collapsed batches and parent groups keep the canvas legible without extra requests; expansion is
+bounded by <code>maxNodes</code> and <code>maxCallsPerBatch</code> in the shared graph options.</li>
+<li>Metadata-only traces by default mean nodes show timing, errors and call counts; prompt and tool
+payloads appear only when content capture was explicitly enabled.</li>
+</ul>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/decisions/ADR-0028-session-analysis-rendering.md">docs/decisions/ADR-0028-session-analysis-rendering.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — a local workbench for reviewing agent-written code.</span><nav class="footer-links" aria-label="Footer navigation"><a class="footer-docs" href="/fluid-coding-site/docs/">Documentation</a><a href="https://github.com/badetitou/fluid-coding">GitHub ↗</a></nav></div></footer></body></html>

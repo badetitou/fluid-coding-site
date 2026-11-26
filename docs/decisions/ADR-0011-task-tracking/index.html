@@ -30,9 +30,9 @@ set plus optional fluid links.</li>
 into a 10–20 line handoff with branch <code>&lt;number&gt;-&lt;slug&gt;</code> and footer <code>Refs #&lt;number&gt;</code>, plus files,
 commands and rules supplied as context.</li>
 <li><strong>Capabilities describe providers, not connections.</strong> <code>/api/tasks/providers</code> returns manifests
-with read/create/update/moveStatus/subTasks/board/milestone/pullRequests flags. Only local tasks
-can be created, and writes mutate the in-memory store. GitHub and GitLab exist as keys, fixtures
-and advertised capabilities; live forge adapters are a later slice.</li>
+with read/create/update/moveStatus/subTasks/board/milestone/pullRequests flags. Originally only
+local tasks could be created; <a href="/fluid-coding-site/docs/decisions/ADR-0023-forge-issue-creation/">ADR-0023</a> adds server-side
+creation on a connected forge. Local writes still mutate the in-memory store.</li>
 <li><strong>Rust owns the wire.</strong> camelCase JSON from <code>fluid-core</code> is mirrored by zod schemas in
 <code>packages/contracts/src/tasks.ts</code> and checked by <code>fixtures/contracts/tasks.json</code>. The web Tasks
 board stays mock-first; <code>VITE_API_MODE=server</code> points it at Rust.</li>
@@ -50,7 +50,8 @@ board stays mock-first; <code>VITE_API_MODE=server</code> points it at Rust.</li
 <li>Status naming has two encodings: snake_case on the wire, kebab-case in local frontmatter. Core maps
 both, and they must stay aligned with <code>board.py</code> and forge labels.</li>
 <li>GitHub/GitLab entries are not live; capability flags must not be read as “sync implemented”.</li>
-<li>Create/patch is not durable yet; file persistence and forge writes remain outstanding.</li>
+<li>Local create/patch is not durable yet; file persistence remains outstanding. Forge creation is
+covered by <a href="/fluid-coding-site/docs/decisions/ADR-0023-forge-issue-creation/">ADR-0023</a>.</li>
 <li>Task keys contain <code>:</code> and <code>#</code>, so clients must percent-encode path segments.</li>
 </ul>
 <h2 id="alternatives-considered">Alternatives considered</h2>

@@ -70,8 +70,9 @@ domains are repo keys. Nothing is inferred by an LLM.</li>
 <li>Git is optional: if the binary is missing or <code>git status</code> fails, changes are empty with a warning.</li>
 <li>At most 2000 files and 512 KiB per file are read; symlinks, hidden directories, <code>node_modules</code>,
 <code>target</code>, <code>dist</code>, <code>build</code> and <code>.fluid-coding</code> are skipped with warnings where actionable.</li>
-<li>Local tasks are read-only here; POST/PATCH still update the in-memory store until local Markdown
-write-back lands. Tags are loaded, not watched.</li>
+<li>Local POST/PATCH still update the in-memory store until local Markdown write-back lands; creation
+can now write a real issue on a connected forge (<a href="/fluid-coding-site/docs/decisions/ADR-0023-forge-issue-creation/">ADR-0023</a>).
+Tags are loaded, not watched.</li>
 <li>Non-UTF-8 files, malformed tags/issues and duplicate task keys are reported in <code>warnings</code> and
 skipped; they never become invented entities.</li>
 </ul>

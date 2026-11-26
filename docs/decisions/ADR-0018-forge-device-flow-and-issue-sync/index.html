@@ -4,7 +4,8 @@
 <li>Date: 2026-11-25</li>
 <li>Amends: <a href="/fluid-coding-site/docs/decisions/ADR-0016-forge-accounts-and-review/">ADR-0016</a>,
 <a href="/fluid-coding-site/docs/decisions/ADR-0017-github-device-flow-and-issues/">ADR-0017</a></li>
-<li>Amended by: <a href="/fluid-coding-site/docs/decisions/ADR-0019-bundled-forge-client-ids/">ADR-0019</a></li>
+<li>Amended by: <a href="/fluid-coding-site/docs/decisions/ADR-0019-bundled-forge-client-ids/">ADR-0019</a>,
+<a href="/fluid-coding-site/docs/decisions/ADR-0023-forge-issue-creation/">ADR-0023</a></li>
 </ul>
 <h2 id="context">Context</h2>
 <p>The task board declares GitHub and GitLab providers, but ADR-0016 only implemented PAT accounts and
@@ -34,8 +35,9 @@ board. The first 100 open issues are loaded; pagination and caching remain follo
 bundles their public client ids in the app; <code>FLUID_*</code> variables remain optional overrides.</li>
 <li>GitLab OAuth access tokens can expire; this slice does not yet persist or rotate refresh tokens.
 Reconnection is required after expiration.</li>
-<li>The normalized remote tasks can produce a local Change Brief and start a local branch, while
-create/update/status operations remain local-only.</li>
+<li>The normalized remote tasks can produce a local Change Brief and start a local branch.
+<a href="/fluid-coding-site/docs/decisions/ADR-0023-forge-issue-creation/">ADR-0023</a> adds remote creation; update and status operations
+remain local-only.</li>
 </ul>
 <h2 id="dogfood-note">Dogfood note</h2>
 <p>The flow was exercised against local HTTP doubles for both forges using this repository as the

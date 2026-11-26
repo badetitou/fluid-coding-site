@@ -15,33 +15,48 @@ while repos, trust and plugins are properties of a local checkout.</p>
 <tr>
 <td><code>opencode</code></td>
 <td>opencode</td>
-<td><code>opencode</code></td>
+<td><code>opencode run --output-format json</code></td>
 </tr>
 <tr>
 <td><code>codex</code></td>
 <td>Codex</td>
-<td><code>codex</code></td>
+<td><code>codex exec --json</code></td>
 </tr>
 <tr>
 <td><code>claude</code></td>
 <td>Claude</td>
-<td><code>claude</code></td>
+<td><code>claude -p --output-format json</code></td>
 </tr>
 <tr>
 <td><code>copilot</code></td>
 <td>Copilot</td>
-<td><code>copilot</code></td>
+<td><code>copilot -p</code></td>
+</tr>
+<tr>
+<td><code>ollama</code></td>
+<td>Ollama</td>
+<td>from the first installed model</td>
 </tr>
 </tbody>
 </table>
+<p>Defaults are one-shot and, where supported, ask for JSON so the dock can show a real answer or a
+real error. They can be overridden per provider. Ollama has no hard-coded model: the server reads
+the names from the local daemon (<code>GET /api/tags</code>, <code>OLLAMA_HOST</code> or <code>http://127.0.0.1:11434</code>), the UI
+offers those names, and saving remembers <code>ollama run &lt;model&gt;</code>. The first installed model is the
+proposed default; the last saved choice wins on later runs
+(<a href="/fluid-coding-site/docs/decisions/ADR-0026-ollama-provider/">ADR-0026</a>). With no installed model the dock reports the
+missing model instead of guessing. Ollama’s CLI returns plain text rather than the agent JSON
+object, so the dock shows the answer as a message; patches still require a model that follows the
+requested JSON contract.</p>
 <ul>
 <li><strong>Autodetection</strong> is a deterministic <code>PATH</code> lookup of the first token of the effective command.
 It does not spawn a process, run a shell or call the network. A path is reported only when it is
 a file with an executable bit (on Unix); directories and non-executable files are ignored.</li>
 <li><strong>Overrides</strong> replace the default command for one provider. Commands are plain argv tokens:
 blank values and shell metacharacters (<code>; &amp; | $ \</code> newlines quotes <code>&lt; &gt;</code>) are rejected.</li>
-<li><strong>Selection</strong> chooses the provider whose effective command is shown; with no selection the
-effective command is the documented default <code>claude -p</code>.</li>
+<li><strong>Selection</strong> chooses the provider used by the Fluid Agent in the dock; with no selection the
+settings view still shows the documented <code>claude -p</code> as a display fallback, but the agent refuses
+to run until a provider is chosen explicitly (<a href="/fluid-coding-site/docs/decisions/ADR-0024-fluid-agent-selected-provider/">ADR-0024</a>).</li>
 <li><strong>Storage</strong>: <code>&lt;home&gt;/.fluid-coding/general-settings.json</code>, version <code>1</code>, with <code>selected</code>,
 <code>commands</code>, <code>theme</code> and <code>railPosition</code>. <code>&lt;home&gt;</code> is <code>FLUID_CODING_HOME</code>, otherwise <code>HOME</code>, with
 <code>&lt;FLUID_WORKSPACE&gt;/.fluid-home</code> and <code>./.fluid-home</code> as last-resort fallbacks

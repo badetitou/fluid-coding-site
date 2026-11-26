@@ -216,8 +216,9 @@ fixture/TS follow. Never change Rust to satisfy a hand-written TypeScript shape.
 <h2 id="tasks">Tasks</h2>
 <p>Task types live in <code>crates/fluid-core/src/tasks/</code>; <code>packages/contracts/src/tasks.ts</code> mirrors them and
 <code>fixtures/contracts/tasks.json</code> is the drift alarm. See <a href="/fluid-coding-site/docs/decisions/ADR-0011-task-tracking/">ADR-0011</a>.</p>
-<p>Enums: <code>TaskSource</code> = <code>local</code>, <code>github</code>, <code>gitlab</code>; <code>TaskStatus</code> = <code>todo</code>, <code>in_progress</code>, <code>in_review</code>,
-<code>done</code> (snake_case on the wire; local frontmatter uses <code>todo</code>, <code>in-progress</code>, <code>in-review</code>, <code>done</code>).</p>
+<p>Enums: <code>TaskSource</code> = <code>local</code>, <code>github</code>, <code>gitlab</code>; <code>TaskDraftSource</code> = <code>auto</code>, <code>local</code>, <code>github</code>,
+<code>gitlab</code> (default <code>auto</code>); <code>TaskStatus</code> = <code>todo</code>, <code>in_progress</code>, <code>in_review</code>, <code>done</code> (snake_case on
+the wire; local frontmatter uses <code>todo</code>, <code>in-progress</code>, <code>in-review</code>, <code>done</code>).</p>
 <p>Stable keys: <code>local:12</code>, <code>github:owner/repo#12</code>, <code>gitlab:group/project#7</code>. They are opaque and
 percent-encoded in path segments.</p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="json"><code><span class="line"><span style="color:#E1E4E8">{</span></span>
@@ -269,7 +270,7 @@ pull request URLs. A brief is derived, not stored:</p>
 </tr>
 <tr>
 <td><code>POST /tasks</code></td>
-<td>creates a local task only; <code>source: github</code>/<code>gitlab</code> is rejected</td>
+<td><code>source: auto</code> (default) creates on the connected forge of the active repo, else locally; explicit <code>local</code>/<code>github</code>/<code>gitlab</code> pins the target and reports a typed error when it is unavailable</td>
 </tr>
 <tr>
 <td><code>GET /tasks/providers</code></td>
@@ -277,7 +278,7 @@ pull request URLs. A brief is derived, not stored:</p>
 </tr>
 <tr>
 <td><code>GET</code>, <code>PATCH /tasks/{key}</code></td>
-<td>read or patch a normalized task; no forge write</td>
+<td>read or patch a task; status updates remain local-only</td>
 </tr>
 <tr>
 <td><code>GET /tasks/{key}/brief</code></td>
@@ -293,8 +294,9 @@ pull request URLs. A brief is derived, not stored:</p>
 <code>created</code>, <code>updated</code>, <code>labels</code>, <code>assignees</code>, <code>milestone</code>, plus <code>remote_key</code> and fluid link keys) and a
 body with <code>## Context</code>, <code>## Acceptance criteria</code> checkboxes and <code>## Out of scope</code>. Parsing tolerates
 unknown keys; serialization emits that shape so the file stays usable by <code>board.py</code>.</p>
-<p>GitHub/GitLab are represented only as normalized snapshots, fixtures and provider capabilities. No
-forge API calls are made in this slice; adapters are a later implementation step.</p>
+<p>GitHub/GitLab snapshots are refreshed from the forge on <code>GET /tasks</code>; <code>POST /tasks</code> with a connected
+account creates a real issue there and normalizes the response into the same <code>Task</code> shape
+(<a href="/fluid-coding-site/docs/decisions/ADR-0023-forge-issue-creation/">ADR-0023</a>). Tokens never leave the server.</p>
 <p>The same types back three read-only MCP tools: <code>list_tasks</code> (filtered task list), <code>get_task</code> (one
 normalized task) and <code>task_brief</code> (deterministic handoff with optional files/commands/rules). Write
 tools stay absent from MCP; agent patches go through the edit routes below under explicit trust.</p>

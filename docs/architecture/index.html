@@ -146,7 +146,14 @@ main thread on graph work.</p>
 <li>State: URL for selection, a small store for server cache; no graph semantics in the client.</li>
 <li>Monaco is the code surface, loaded lazily with LSP-style navigation. “Open in VS Code” is the escape
 hatch, not the editor.</li>
-<li>The agent dock is persistent across routes: task brief → chat turn → patch review → apply → checkpoint.</li>
+<li>The agent dock is persistent across routes: task brief → chat turn → patch review → apply → checkpoint.
+Its width is a browser-local shell preference, resized from the left divider; it stays out of the
+shared settings contract and out of the repository.</li>
+<li>Session analysis is a dedicated lazy route <code>/analysis?ids=...&amp;expand=...</code> under <code>Shell</code>, opened from
+Agents for one session or a multi-selection; it adds no primary nav item. <code>@xyflow/react</code> v13 and
+its stylesheet load only with that route. React Flow is the session-graph surface; the structure map
+keeps its custom canvas. Rust computes node positions and batching, React only renders them
+(<a href="/fluid-coding-site/docs/decisions/ADR-0028-session-analysis-rendering/">ADR-0028</a>).</li>
 </ul>
 <h2 id="9-plugin-seams">9. Plugin seams</h2>
 <p><code>fluid-core/src/plugins</code> owns contracts; upper layers own adapters and I/O.</p>
@@ -206,6 +213,12 @@ contract is deliberately small and object-safe:</p>
 (<code>start</code>/<code>send</code>/<code>cancel</code>) is an additive extension of the same port. MCP remains the external tool
 contract: <code>get_matrix</code>, <code>cell_symbols</code>, <code>get_entity</code>, <code>get_relations</code>, <code>get_impact</code>, <code>get_diff</code>,
 <code>list_tags</code>, <code>propose_tag</code>, plus task reads. Every write path requires trust mode and is audited.</p>
+<p>Span ingestion is an additive part of the same <code>AgentPort</code> adapter boundary: CLI adapters inject a
+loopback OTLP endpoint into the spawned provider, the server accepts OTLP/HTTP JSON at
+<code>POST /_telemetry/v1/traces</code>, and <code>fluid-core</code> holds the pure normalized trace and graph types.
+Correlation uses <code>traceparent</code>, then conversation/session id plus time. Content capture is opt-in and
+off by default; no native opencode or Claude Code database is read in v1
+(<a href="/fluid-coding-site/docs/decisions/ADR-0027-genai-trace-model/">ADR-0027</a>).</p>
 <h2 id="11-storage">11. Storage</h2>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>.claude/issues/NNNN-slug.md   # canonical local tasks, board.py compatible</span></span>
 <span class="line"><span>.fluid/</span></span>
@@ -217,6 +230,7 @@ contract: <code>get_matrix</code>, <code>cell_symbols</code>, <code>get_entity</
 <span class="line"><span>.structure/rules.toml         # baseline classifier</span></span>
 <span class="line"><span>.fluid-coding/cache/          # gitignored: graph, matrix, SQLite</span></span>
 <span class="line"><span>.fluid-coding/sessions/       # gitignored: chat history, audit</span></span>
+<span class="line"><span>.fluid-coding/traces/         # gitignored: append-only OTLP spans, atomic JSONL</span></span>
 <span class="line"><span>.fluid-coding/checkpoints/    # gitignored when persisted; in-memory for the first slice</span></span></code></pre>
 <h2 id="12-projects-and-repositories">12. Projects and repositories</h2>
 <p>A project is a local, multi-repo workspace, not necessarily a monorepo. <code>.fluid-coding/project.json</code>

@@ -1,0 +1,118 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Session graph contract · fluid-coding</title><meta name="description" content="Status: accepted with the session-analysis v1 contract. Rust owns the wire shape in"><meta property="og:title" content="Session graph contract · fluid-coding"><meta property="og:description" content="Status: accepted with the session-analysis v1 contract. Rust owns the wire shape in"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> Session graph contract</nav><article class="prose"><h1 id="session-graph-contract">Session graph contract</h1>
+<p>Status: accepted with the session-analysis v1 contract. Rust owns the wire shape in
+<a href="../../crates/fluid-core/src/session_graph"><code>fluid-core/src/session_graph</code></a>; TypeScript mirrors it in
+<code>packages/contracts/src/session-graph.ts</code>; <a href="../../fixtures/contracts/session-graph.json"><code>fixtures/contracts/session-graph.json</code></a>
+is parsed on both sides as the drift alarm.</p>
+<p>All fields are camelCase. <code>Option&lt;T&gt;</code> is always serialized as <code>null</code> when absent. <code>Vec</code> and maps are
+ordered; there are no hash-ordered fields.</p>
+<h2 id="example">Example</h2>
+<p>The fixture contains a parent session, one nested subagent session, three consecutive tool spans and
+one error span:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="json"><code><span class="line"><span style="color:#E1E4E8">{</span></span>
+<span class="line"><span style="color:#79B8FF">  "sessions"</span><span style="color:#E1E4E8">: [</span></span>
+<span class="line"><span style="color:#E1E4E8">    {</span></span>
+<span class="line"><span style="color:#79B8FF">      "id"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"chat-42"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "title"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"Review the parser changes"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "agent"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"fluid"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "provider"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"claude-code"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "conversationId"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"conv-42"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "startMs"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">1000</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "endMs"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">9000</span></span>
+<span class="line"><span style="color:#E1E4E8">    },</span></span>
+<span class="line"><span style="color:#E1E4E8">    {</span></span>
+<span class="line"><span style="color:#79B8FF">      "id"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"agent-7"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "title"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"Nested reviewer"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "agent"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"fake"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "provider"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"opencode"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "conversationId"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"conv-7"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "startMs"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">2100</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "endMs"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">6000</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#E1E4E8">  ],</span></span>
+<span class="line"><span style="color:#79B8FF">  "spans"</span><span style="color:#E1E4E8">: [</span></span>
+<span class="line"><span style="color:#E1E4E8">    {</span></span>
+<span class="line"><span style="color:#79B8FF">      "spanId"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"span-root"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "parentSpanId"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">null</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "traceId"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"trace-42"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "conversationId"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"conv-42"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "sessionId"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"chat-42"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "operation"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"invoke_agent"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "name"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"fluid run"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "agentName"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"fluid"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "providerName"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"claude-code"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "startMs"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">1000</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "endMs"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">9000</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "durationMs"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">8000</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "tokens"</span><span style="color:#E1E4E8">: { </span><span style="color:#79B8FF">"input"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">120</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">"output"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">80</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">"cacheRead"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">20</span><span style="color:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#79B8FF">      "errorType"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">null</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "toolName"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">null</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "toolCallId"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">null</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "contentRef"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">null</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "attributes"</span><span style="color:#E1E4E8">: [{ </span><span style="color:#79B8FF">"key"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"gen_ai.model"</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">"value"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"claude-sonnet"</span><span style="color:#E1E4E8"> }]</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#E1E4E8">  ]</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>The remaining spans follow the same shape; see the fixture file for the complete trace. Responses
+from <code>GET /api/session-analysis</code> are <code>SessionGraph</code> values: <code>sessions</code>, <code>nodes</code>, <code>edges</code>, <code>stats</code>.</p>
+<h2 id="node-kinds">Node kinds</h2>
+<table>
+<thead>
+<tr>
+<th><code>kind</code></th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>session</code></td>
+<td>A <code>TraceSession</code> lane, or a top-level <code>invoke_agent</code> span</td>
+</tr>
+<tr>
+<td><code>turn</code></td>
+<td><code>chat</code> (also <code>inference</code>, <code>completion</code>, <code>text_completion</code>)</td>
+</tr>
+<tr>
+<td><code>toolBatch</code></td>
+<td>One or more consecutive <code>execute_tool</code> spans</td>
+</tr>
+<tr>
+<td><code>tool</code></td>
+<td>An individual tool span inside an expanded batch</td>
+</tr>
+<tr>
+<td><code>subagent</code></td>
+<td>An <code>invoke_agent</code> span with a span parent</td>
+</tr>
+<tr>
+<td><code>exception</code></td>
+<td>An <code>exception</code> span</td>
+</tr>
+<tr>
+<td><code>message</code></td>
+<td>Any other operation, including provider-specific strings preserved verbatim</td>
+</tr>
+</tbody>
+</table>
+<h2 id="invariants">Invariants</h2>
+<ul>
+<li>One lane per input <code>TraceSession</code>, in input order. Depth follows the topological order of
+<code>parentSpanId</code>, then <code>startMs</code>/<code>spanId</code> for stable ties. Reversing span input order does not change
+the graph when timestamps and ids are equal.</li>
+<li>Consecutive <code>execute_tool</code> spans in a lane collapse into one <code>GraphEdge</code> between the surrounding
+non-tool nodes. <code>callCount</code>, <code>totalDurationMs</code>, <code>avgDurationMs</code> (integer division) and
+<code>errorCount</code> summarize the batch; <code>toolNames</code> holds at most 8 distinct sorted names.</li>
+<li><code>intensity = min(callCount / max(maxCallsPerBatch, 1), 1)</code> and is clamped to <code>0..1</code>.</li>
+<li><code>GraphOptions.expanded</code> lists span ids from a batch. An expanded batch emits individual <code>tool</code>
+nodes as children, capped by <code>maxCallsPerBatch</code>; the aggregate edge stays in place.</li>
+<li><code>maxNodes</code> caps every emitted node, including lane roots. Every node that cannot be emitted is
+counted in <code>stats.droppedNodes</code>; tool calls beyond an expansion cap are counted there too. A
+collapsed batch is one node, not one node per call.</li>
+<li>Missing parent ids attach to the lane root. Cycles are broken deterministically (one cycle member
+becomes a root); no path recurses forever and no parent id dangles.</li>
+<li><code>contentRef</code> is <code>null</code> unless content capture was explicitly enabled upstream. Metadata is always
+present; prompts and tool payloads are never inferred by the core.</li>
+<li>No I/O, clock, randomness or async in <code>fluid-core</code>; the same input always serializes identically.</li>
+</ul>
+<h2 id="defaults">Defaults</h2>
+<p><code>GraphOptions</code> defaults to <code>maxNodes: 300</code>, <code>maxCallsPerBatch: 8</code>, <code>expanded: []</code>.</p>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/contracts/session-graph.md">docs/contracts/session-graph.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — a local workbench for reviewing agent-written code.</span><nav class="footer-links" aria-label="Footer navigation"><a class="footer-docs" href="/fluid-coding-site/docs/">Documentation</a><a href="https://github.com/badetitou/fluid-coding">GitHub ↗</a></nav></div></footer></body></html>
