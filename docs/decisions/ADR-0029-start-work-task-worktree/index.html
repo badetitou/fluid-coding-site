@@ -28,6 +28,10 @@ checkpoint restore target that worktree. The Tasks board announces the run and o
 dock on its conversation.</li>
 <li>Local tasks move to <code>in_progress</code> and record their branch after a successful start. Remote issues
 stay read-only; their normalized snapshot is unchanged.</li>
+<li>The agent run does not block the request. <code>POST /api/tasks/{key}/start</code> returns once the worktree
+exists and the conversation is written with a <code>pending</code> turn; the run settles that turn in the
+background (or with its error). The dock opens the conversation at once and reloads it while the
+last turn is pending.</li>
 </ol>
 <h2 id="consequences">Consequences</h2>
 <p>Positive:</p>
