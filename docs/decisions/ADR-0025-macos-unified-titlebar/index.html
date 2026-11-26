@@ -19,7 +19,7 @@ Rust-first, low-footprint shell.</p>
 <code>with_titlebar_transparent(true)</code>, <code>with_title_hidden(true)</code>,
 <code>with_fullsize_content_view(true)</code> and an explicit traffic-light inset. The
 webview is transparent so the themed topbar paints the whole band.</li>
-<li><code>crates/fluid-cli/src/drag.rs</code> adds a transparent <code>NSView</code> over the full 28pt
+<li><code>crates/fluid-cli/src/drag.rs</code> adds a transparent <code>NSView</code> over the full 52pt
 band. Its <code>mouseDown:</code> calls <code>performWindowDragWithEvent:</code> (or <code>performZoom:</code>
 on double-click), which is what Electron does behind <code>app-region: drag</code>.
 Traffic-light buttons stay above the strip and remain clickable. The web
@@ -39,7 +39,7 @@ root element and CSS is the only consumer.</p>
 <li>The native title string disappears and the traffic lights sit inside the
 themed topbar band, with one continuous surface instead of two.</li>
 <li>Window movement and double-click zoom still work without a Chromium runtime.</li>
-<li>The strip covers the whole titlebar band except the published control rects;
+<li>The strip covers the whole topbar band except the published control rects;
 dragging works from empty topbar space and the controls stay clickable. In
 fullscreen the strip is hidden and the CSS indent drops via the
 <code>data-fullscreen</code> marker, because AppKit hides the controls.</li>
