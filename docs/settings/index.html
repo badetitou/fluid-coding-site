@@ -67,12 +67,17 @@ settings view still shows the documented <code>claude -p</code> as a display fal
 to run until a provider is chosen explicitly (<a href="/fluid-coding-site/docs/decisions/ADR-0024-fluid-agent-selected-provider/">ADR-0024</a>).</li>
 <li><strong>Navigation rail</strong>: the left/right position is a machine-level General setting. It is applied to
 the shell as soon as it changes and persists with the other General values; no reload is needed.</li>
+<li><strong>Changes view</strong>: <code>changesViewMode</code> (<code>list</code> or <code>tree</code>, <code>list</code> by default) chooses how the Changes
+page groups files. The tree is shaped by <code>fluid-core</code> from the same diffs, not by the browser;
+the choice can be changed on the page or here and persists with the other General values
+(<a href="/fluid-coding-site/docs/decisions/ADR-0049-changes-tree-view/">ADR-0049</a>).</li>
 <li><strong>Tracing</strong>: <code>sessionTracing</code> decides whether local agent runs emit OTLP traces and
 <code>captureGenAiContent</code> opts in to recording prompts and tool payloads. Both are General toggles,
 defaulting to prompts and payloads off; they apply immediately to the next agent run
 (<a href="/fluid-coding-site/docs/decisions/ADR-0027-genai-trace-model/">ADR-0027</a>).</li>
 <li><strong>Storage</strong>: <code>&lt;home&gt;/.fluid-coding/general-settings.json</code>, version <code>1</code>, with <code>selected</code>,
-<code>commands</code>, <code>theme</code>, <code>railPosition</code>, <code>sessionTracing</code> and <code>captureGenAiContent</code>. <code>&lt;home&gt;</code> is
+<code>commands</code>, <code>theme</code>, <code>railPosition</code>, <code>changesViewMode</code>, <code>sessionTracing</code> and
+<code>captureGenAiContent</code>. <code>&lt;home&gt;</code> is
 <code>FLUID_CODING_HOME</code>, otherwise <code>HOME</code>, with <code>&lt;FLUID_WORKSPACE&gt;/.fluid-home</code> and <code>./.fluid-home</code> as
 last-resort fallbacks (<a href="/fluid-coding-site/docs/decisions/ADR-0022-general-settings-home/">ADR-0022</a>). This keeps
 machine-level settings out of checkouts and out of the process working directory, which is

@@ -1,0 +1,53 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ADR-0049 — Changes view: tree mode alongside the flat list · fluid-coding</title><meta name="description" content="- Status: accepted, implemented on branch 102-changes-view-tree-mode-alongside-the-fla; not yet merged"><meta property="og:title" content="ADR-0049 — Changes view: tree mode alongside the flat list · fluid-coding"><meta property="og:description" content="- Status: accepted, implemented on branch 102-changes-view-tree-mode-alongside-the-fla; not yet merged"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> ADR-0049 — Changes view: tree mode alongside the flat list</nav><article class="prose"><h1 id="adr-0049--changes-view-tree-mode-alongside-the-flat-list">ADR-0049 — Changes view: tree mode alongside the flat list</h1>
+<ul>
+<li>Status: accepted, implemented on branch <code>102-changes-view-tree-mode-alongside-the-fla</code>; not yet merged</li>
+<li>Date: 2026-11-27</li>
+<li>Deciders: Benoit (to validate)</li>
+<li>Amends: ADR-0022 (general settings home), ADR-0036 (settings scope)</li>
+</ul>
+<h2 id="context">Context</h2>
+<p>The Changes page showed one flat list of changed paths. Worktrees nest files several directories
+deep, so <code>repo/apps/web/src/a/b/file.ts</code> took a whole row and hid which directories actually
+changed. Grouping had to be a view choice, not a repository change: the same project can be reviewed
+as a flat patch list or as a tree, and the choice must survive reload/restart for the user, not for
+one checkout.</p>
+<h2 id="decision">Decision</h2>
+<ol>
+<li><strong>Shaping is pure <code>fluid-core</code>.</strong> <code>shape_change_tree(&amp;[FileDiff]) -&gt; Vec&lt;ChangeTreeNode&gt;</code> builds
+one node per changed path segment, drops every folder with no changed file below it, recursively
+collapses single-child folder chains into one labelled row (<code>repo/src/a/b/</code>), aggregates
+additions/deletions/file counts, and orders folders before files. It has no I/O and compiles to
+wasm32. React never reshapes the tree; it only flattens the returned nodes into visible rows.</li>
+<li><strong>One batched answer.</strong> <code>GET /api/changes</code> now returns <code>{ files, tree }</code> with the flat diffs and
+the same diffs shaped once in Rust. No second git diff and no extra request when switching mode.
+<code>ChangeTreeNode</code>, <code>changesResponseSchema</code> and the shared fixtures
+<code>fixtures/contracts/change-tree.json</code> and <code>fixtures/contracts/changes-response.json</code> are
+validated on both sides. This is an intentional contract break: a stale client that still
+expects an array fails validation rather than silently showing a partial tree. The macOS app
+embeds matching web assets, so mixed versions are not a supported pairing.</li>
+<li><strong>The mode is machine-level General settings.</strong> <code>changesViewMode: 'list' | 'tree'</code> defaults to
+<code>list</code>, lives in <code>~/.fluid-coding/general-settings.json</code> and is read/ patched through
+<code>/api/settings/general</code>; it is never stored in <code>.fluid/</code>, browser storage or the URL. The
+Settings → General segmented control and the Changes page toggle write the same setting and stay
+in sync through the existing settings events. The hook is imported only by the lazy Changes page,
+so the settings seam adds nothing to the initial JS chunk.</li>
+<li><strong>Both modes share the row affordances.</strong> Full paths are in <code>title</code> tooltips, labels ellipsize,
+the empty state renders in either mode, and folders expand/collapse locally without changing the
+shaped data.</li>
+</ol>
+<h2 id="consequences">Consequences</h2>
+<ul>
+<li>The contract break is deliberate and small: one endpoint changes from an array to an object; the
+zod schema and the web loader move together, the server route test proves both lists start empty,
+and a shared response fixture is parsed by Rust and zod.</li>
+<li>Legacy settings files without <code>changesViewMode</code> parse to <code>list</code>; unknown values are rejected by
+both Rust and zod.</li>
+<li>A path that is both a file and a directory (file→directory transition) keeps both rows, and
+duplicate paths aggregate into one row: no changed file disappears from the tree.</li>
+<li>General settings writes are serialized server-side (<code>settings_write</code> mutex), so a Changes toggle
+cannot lose a concurrent provider/model patch from the dock or another field.</li>
+<li>The tree is derived per changes response, not cached in the repository or in React state; a new
+review target naturally produces a new tree on the next load.</li>
+<li>Bundle check stays under the 150 KiB gzip initial-JS budget (142.0 KiB measured on this branch).</li>
+</ul>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/decisions/ADR-0049-changes-tree-view.md">docs/decisions/ADR-0049-changes-tree-view.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — a local workbench for reviewing agent-written code.</span><nav class="footer-links" aria-label="Footer navigation"><a class="footer-docs" href="/fluid-coding-site/docs/">Documentation</a><a href="https://github.com/badetitou/fluid-coding">GitHub ↗</a></nav></div></footer></body></html>
