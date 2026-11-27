@@ -1,0 +1,32 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ADR-0048 — The analysis canvas is a linked tree, down or right · fluid-coding</title><meta name="description" content="- Status: proposed"><meta property="og:title" content="ADR-0048 — The analysis canvas is a linked tree, down or right · fluid-coding"><meta property="og:description" content="- Status: proposed"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> ADR-0048 — The analysis canvas is a linked tree, down or right</nav><article class="prose"><h1 id="adr-0048--the-analysis-canvas-is-a-linked-tree-down-or-right">ADR-0048 — The analysis canvas is a linked tree, down or right</h1>
+<ul>
+<li>Status: proposed</li>
+<li>Date: 2026-11-27</li>
+<li>Deciders: Benoit (to validate)</li>
+<li>Amends: ADR-0028 (session analysis rendering)</li>
+</ul>
+<h2 id="context">Context</h2>
+<p>Children were laid out under their parent while edge handles sat on the left and right, and the
+only edges were tool batches drawn from one turn to the next: most nodes floated with no line to
+where they came from. A sub-agent’s grandchildren (an inner turn’s batch) were placed below its box,
+so dragging the box left them behind, and an open batch’s tool rows did not follow their batch.
+An open batch also showed 8 calls and counted the rest as dropped.</p>
+<h2 id="decision">Decision</h2>
+<ol>
+<li><strong>Every node is linked.</strong> Calls arrive on an aggregated edge into their tool batch or MCP server;
+every other node gets a plain link (<code>callCount: 0</code>) from its parent. A node drawn inside its
+parent’s box (a sub-agent’s direct child, an open batch’s tool rows) has no line.</li>
+<li><strong>Containers hold their subtree.</strong> The layout places a sub-agent’s whole subtree inside its box,
+grows the box to fit once the subtree is placed, and moves it right if it then covers another
+node. On the canvas, a node’s React Flow parent is its nearest container (sub-agent or open
+batch), with <code>extent: 'parent'</code>, so it moves with the box and cannot leave it.</li>
+<li><strong>Two directions.</strong> <code>GraphOptions.direction</code> (<code>down</code> | <code>right</code>, default <code>down</code>) is laid out by the
+core: the tree is computed along one axis and turned for <code>right</code>, tool rows staying a list down
+their batch. <code>SessionGraph.direction</code> echoes it and the canvas puts handles on the matching sides
+(bottom→top or right→left). The page keeps the choice in the URL (<code>layout=right</code>).</li>
+<li><strong>Open batches show their calls.</strong> The route defaults to 1 000 nodes and 200 rows per open batch
+(bounds 2 000 and 500). Edge intensity uses a fixed 8-call scale instead of the row limit.</li>
+</ol>
+<p>Contract: <code>direction</code> is added to <code>GraphOptions</code> and <code>SessionGraph</code> in Rust and zod, defaulting to
+<code>down</code>, so older payloads still parse.</p>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/decisions/ADR-0048-analysis-tree-layout.md">docs/decisions/ADR-0048-analysis-tree-layout.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — a local workbench for reviewing agent-written code.</span><nav class="footer-links" aria-label="Footer navigation"><a class="footer-docs" href="/fluid-coding-site/docs/">Documentation</a><a href="https://github.com/badetitou/fluid-coding">GitHub ↗</a></nav></div></footer></body></html>
