@@ -1,0 +1,128 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ADR-0040 — Agents edit and run checks inside the task worktree · fluid-coding</title><meta name="description" content="- Status: proposed"><meta property="og:title" content="ADR-0040 — Agents edit and run checks inside the task worktree · fluid-coding"><meta property="og:description" content="- Status: proposed"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> ADR-0040 — Agents edit and run checks inside the task worktree</nav><article class="prose"><h1 id="adr-0040--agents-edit-and-run-checks-inside-the-task-worktree">ADR-0040 — Agents edit and run checks inside the task worktree</h1>
+<ul>
+<li>Status: proposed</li>
+<li>Date: 2026-11-27</li>
+<li>Deciders: Benoit (to validate)</li>
+<li>Amends: <a href="/fluid-coding-site/docs/decisions/ADR-0029-start-work-task-worktree/">ADR-0029</a> (Start Work trust), the
+“adapters never write repository files” note in <code>crates/fluid-server/src/agents/mod.rs</code></li>
+</ul>
+<h2 id="context">Context</h2>
+<p>Start Work creates an isolated worktree and runs the Fluid Agent there (ADR-0029), but the agent
+could not do the task. A probe on 2026-11-27 with real CLIs in a scratch repository showed:</p>
+<ul>
+<li><code>opencode run --format json</code> (v2.4.2) has <code>read</code>, <code>write</code>, <code>edit</code>, <code>shell</code>, <code>grep</code>, <code>glob</code>,
+<code>subagent</code>, <code>webfetch</code> and writes files without <code>--auto</code>. Tool access was not the problem.</li>
+<li><code>claude -p --output-format json</code> (2.1.332) denies <code>Write</code> in its default permission mode: a
+headless run has no one to approve it. <code>--permission-mode acceptEdits --allowedTools=Bash</code> lets it
+edit and run commands. <code>--allowedTools</code> is variadic, so only the <code>=</code> form keeps the prompt intact.</li>
+<li>The adapter prompt (<code>agents/cli/prompt.rs</code>) said “do not write files” in every trust mode and asked
+for hand-written JSON hunks. It also said “Use the read-only MCP tools for facts”, but no MCP server
+is passed (ADR-0031 is proposed). Replaying that prompt through opencode on a one-line task cost 33
+tool calls spent looking for the missing tools, wrote nothing and returned a JSON patch.</li>
+<li>Start Work always sent <code>TrustMode::Propose</code>, so the brief’s <code>Check:</code> commands and commit footer
+could not be acted on.</li>
+</ul>
+<p>ADR-0007 already defines the modes: <code>propose</code> is a patch proposal, <code>edit</code> is a direct edit, <code>auto</code>
+is edit plus checks. The task worktree is the isolation those modes assume.</p>
+<h2 id="decision">Decision</h2>
+<ol>
+<li><strong>Write access depends on the trust mode and on where the agent runs.</strong> The adapter resolves an
+access level from the request’s trust mode and its working directory:
+<table>
+<thead>
+<tr>
+<th>Working directory</th>
+<th><code>propose</code></th>
+<th><code>edit</code></th>
+<th><code>auto</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>task worktree (Start Work)</td>
+<td>read-only</td>
+<td>edit</td>
+<td>edit + run</td>
+</tr>
+<tr>
+<td>main checkout or none (dock, intake)</td>
+<td>read-only</td>
+<td>read-only</td>
+<td>read-only</td>
+</tr>
+<tr>
+<td>The main checkout never gets write access, so the user’s uncommitted work is never touched.</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+</li>
+<li><strong>Read-only keeps the patch contract.</strong> The prompt asks for patches in the one-object JSON, as
+before, and tells the agent to read with its own read-only tools. The line about MCP tools is
+removed until ADR-0031 ships a server.</li>
+<li><strong>Edit and edit + run work in place.</strong> The prompt says the cwd is an isolated worktree for the
+task: edit files there with the agent’s own tools, never touch files outside it, never push or
+switch branches. Edit + run also runs the brief’s checks, fixes failures, and commits on the
+current branch with the brief’s commit footer. The answer is the same JSON object with
+<code>messages</code> (what changed, check results) and no patches.</li>
+<li><strong>Permission flags are per provider, added by the adapter.</strong> A pure table maps provider and access
+to extra argv inserted before the prompt. A flag already present in the user’s command wins.
+<table>
+<thead>
+<tr>
+<th>Provider</th>
+<th>Edit</th>
+<th>Edit + run</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>claude</code></td>
+<td><code>--permission-mode acceptEdits</code></td>
+<td><code>--permission-mode acceptEdits --allowedTools=Bash</code></td>
+</tr>
+<tr>
+<td><code>opencode</code></td>
+<td><code>--auto</code></td>
+<td><code>--auto</code></td>
+</tr>
+<tr>
+<td><code>codex</code>, <code>copilot</code>, <code>ollama</code></td>
+<td>none (follow-up)</td>
+<td>none (follow-up)</td>
+</tr>
+</tbody>
+</table>
+</li>
+<li><strong>Start Work runs in <code>auto</code>.</strong> The brief carries <code>Check:</code> commands and a commit footer; the
+worktree is the review unit.</li>
+</ol>
+<h2 id="consequences">Consequences</h2>
+<p>Positive:</p>
+<ul>
+<li>A started task ends with real changes on its branch, checked by the brief’s commands.</li>
+<li>The prompt no longer sends agents after tools that do not exist.</li>
+<li>The dock and intake behave as before: read-only, patches only.</li>
+</ul>
+<p>Negative:</p>
+<ul>
+<li>In the worktree, opencode <code>--auto</code> and Claude <code>--allowedTools=Bash</code> allow any shell command. The
+isolation is a git worktree, not a sandbox: a hostile command can still reach the rest of the
+machine. The prompt forbids leaving the worktree; nothing enforces it.</li>
+<li>Work done in the worktree does not appear in Review’s patch list; users open the worktree or its
+branch. Showing the worktree diff in Review is a follow-up.</li>
+<li>Codex (<code>codex exec</code> is read-only by default) and Copilot (<code>copilot -p</code> needs tool approval) still
+cannot write; their flags must be verified against installed CLIs before they are added.</li>
+</ul>
+<h2 id="alternatives-considered">Alternatives considered</h2>
+<ul>
+<li><strong>Keep patches only and apply them automatically in the worktree.</strong> Rejected: the agent still
+cannot run checks against its change, and hand-written hunks with exact old lines are fragile.</li>
+<li><strong>Always pass <code>--dangerously-skip-permissions</code> / bypass mode.</strong> Rejected: broader than needed and
+would also apply to the dock in the main checkout.</li>
+<li><strong>Wait for the MCP server (ADR-0031).</strong> Rejected: MCP gives facts and proposals, not file edits or
+shell; the agents’ own tools already do that.</li>
+</ul>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/decisions/ADR-0040-agents-edit-task-worktree.md">docs/decisions/ADR-0040-agents-edit-task-worktree.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — a local workbench for reviewing agent-written code.</span><nav class="footer-links" aria-label="Footer navigation"><a class="footer-docs" href="/fluid-coding-site/docs/">Documentation</a><a href="https://github.com/badetitou/fluid-coding">GitHub ↗</a></nav></div></footer></body></html>
