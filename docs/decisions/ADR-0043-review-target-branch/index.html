@@ -29,7 +29,11 @@ leave the task In Progress.</li>
 issue. The board then reads the open request for the task’s branch: a draft means In Progress, a
 ready request means In Review, and a local branch with no request yet means In Progress while the
 issue is open. Closed issues keep their state.</li>
-<li>The topbar switcher and the “Review changes” action on an In Review task both use this seam.</li>
+<li>The topbar switcher and the In Review task’s “Review”, “Review changes” and “Analyse run” actions
+all use this seam. Session analysis stays served by the active project’s trace store (ADR-0027):
+while a task worktree is under review, only the conversations recorded for that task are resolved,
+so the canvas shows the run that produced the branch and not unrelated sessions. Switching back to
+the main checkout removes the filter.</li>
 </ul>
 <h2 id="consequences">Consequences</h2>
 <ul>

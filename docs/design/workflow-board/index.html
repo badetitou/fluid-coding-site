@@ -46,7 +46,7 @@ which is a separate media query.</li>
 <tr>
 <td>In Review</td>
 <td>Amber badge “Review”, changed-files count</td>
-<td>Actions: Inspect worktree (#10), Comment (#11), Validate (#12)</td>
+<td>Actions: Inspect worktree (#10, done), Comment (#11), Validate (#12)</td>
 </tr>
 <tr>
 <td>Done</td>
@@ -74,6 +74,10 @@ shows “No task worktrees yet”), long branch name (middle truncation, full na
 <li>375 px: shows only the glyph and a 12-character truncated name; the menu opens as a bottom sheet.</li>
 <li>Keyboard: button is a menu button (Enter/Space/Arrow down opens, arrows move, Escape closes and
 returns focus). Reduced motion: no slide, fade only.</li>
+<li>Implemented by ADR-0043 and issue #10: the menu groups main, task worktrees, other worktrees and
+branches; the In Review card’s “Review changes” and “Analyse run” actions pick the task worktree
+and open Changes or the scoped session analysis. Status dots, the 375 px bottom sheet and full
+arrow-key navigation remain refinements.</li>
 </ul>
 <h2 id="open-points">Open points</h2>
 <ul>
