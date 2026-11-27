@@ -99,6 +99,11 @@ Claude, any <code>--permission-mode</code> the user set also suppresses shell ac
 </li>
 <li><strong>Start Work runs in <code>auto</code>.</strong> The brief carries <code>Check:</code> commands and a commit footer; the
 worktree is the review unit.</li>
+<li><strong>Auto delivers a forge task as a pull request.</strong> For a GitHub or GitLab task, the agent pushes
+the task branch only (never force, never the base branch), opens a draft request after its first
+commit, pushes after each step, and marks the request ready for review once the checks pass and the
+work is finished. Local tasks get no request. This amends the “never push” rule of decision 3 for
+edit + run only; the request’s delivery rule is the only source of push permission.</li>
 </ol>
 <h2 id="consequences">Consequences</h2>
 <p>Positive:</p>
