@@ -1,5 +1,5 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Home — task composer bar · fluid-coding</title><meta name="description" content="Status: revision 3, after the first adversarial review (REJECT, 15 findings — addressed below) and the"><meta property="og:title" content="Home — task composer bar · fluid-coding"><meta property="og:description" content="Status: revision 3, after the first adversarial review (REJECT, 15 findings — addressed below) and the"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> Home — task composer bar</nav><article class="prose"><h1 id="home--task-composer-bar">Home — task composer bar</h1>
-<p>Status: revision 3, after the first adversarial review (REJECT, 15 findings — addressed below) and the
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Home — task composer bar · fluid-coding</title><meta name="description" content="Status: revision 3 (with the set extension, #99), after the first adversarial review (REJECT, 15 findings — addressed below) and the"><meta property="og:title" content="Home — task composer bar · fluid-coding"><meta property="og:description" content="Status: revision 3 (with the set extension, #99), after the first adversarial review (REJECT, 15 findings — addressed below) and the"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> Home — task composer bar</nav><article class="prose"><h1 id="home--task-composer-bar">Home — task composer bar</h1>
+<p>Status: revision 3 (with the set extension, #99), after the first adversarial review (REJECT, 15 findings — addressed below) and the
 shared chat field change. Extends <a href="/fluid-coding-site/docs/design/home-now/"><code>home-now.md</code></a>. Decision records:
 <a href="/fluid-coding-site/docs/decisions/ADR-0035-task-intake-chat/">ADR-0035</a>,
 <a href="/fluid-coding-site/docs/decisions/ADR-0038-shared-chat-field/">ADR-0038</a>.</p>
@@ -104,6 +104,24 @@ ref updated synchronously, so two sends in the same tick cannot both reach the A
 design does <strong>not</strong> retry only the missing sub-tasks (more states for a rare failure); the composer
 reports the parent and drops the draft, so a retry cannot duplicate the parent. The user creates the
 missing sub-tasks on the Board. This is the trade-off to confirm.</p>
+<h2 id="sets-of-linked-issues-99">Sets of linked issues (#99)</h2>
+<p>One idea often needs several issues. The agent can propose a <strong>set</strong> instead of one draft:</p>
+<ul>
+<li>Each item has a <code>ref</code> (short id unique in the set), a title, a body, an optional <code>parent</code> (the <code>ref</code> of
+another item in the set) and <code>related</code> refs (issues linked without a parent). Children attach to a
+parent that is also in the set; a set of linked issues has no parent.</li>
+<li>Each reply carries the complete proposal of the round, for a draft or for a set. The request sends the
+set the user is reviewing (<code>currentSet</code>), so the agent edits, adds or removes items and returns the
+whole result. A reply without a set withdraws it, as it does for a draft. A reply never fills both.</li>
+<li>The card lists every item of the set before anything is created. Children are indented under their
+parent; the summary gives the counts.</li>
+<li><strong>Create issues</strong> creates the set on the local board only: parents first, each child attached to its
+new parent key, related titles listed in the body. Forge creation of a set is a separate change.</li>
+<li>A partly created set is dropped and the failing issue is named, as for a draft with a failed sub-task,
+so a retry cannot duplicate issues. The Board takes one issue: it reports a set and asks for Home.</li>
+</ul>
+<p>Contract: <code>taskIntakeSetItemSchema</code>, <code>set</code> on the reply and <code>currentSet</code> on the request. Rust:
+<code>task_intake_set.rs</code> validates refs, links, parent cycles and the 20-item limit.</p>
 <h2 id="interaction">Interaction</h2>
 <ul>
 <li><strong>Send</strong>: the send button or ⌘/Ctrl + Enter (same as the dock). A plain Enter inserts a newline.</li>
