@@ -23,6 +23,14 @@ The client reloads that conversation until the turn settles. Settling replaces t
 with the parsed answer and keeps the tool calls.</li>
 <li>Tool calls are stored on the turn (<code>ChatTurn.tools</code>) with a preview of their input and output,
 clipped to 2,000 characters.</li>
+<li>Sub-agents: Claude marks the output of a sub-agent with <code>parent_tool_use_id</code>. That output becomes
+<code>AgentEvent::Nested</code> and is stored under the call that started it (<code>ToolActivity.run</code>, an
+<code>AgentTranscript</code>), recursively. The dock shows a breadcrumb path to reach it; the path is kept
+as tool ids and ends where an id no longer exists. opencode runs a sub-agent in its own session, whose events are not in the run’s stream. The
+adapter records each sub-agent’s session from the <code>subagent</code> call’s metadata; once the run has
+ended it reads that session back with <code>opencode session export &lt;id&gt;</code> and nests its text and tool
+calls under the call. So opencode sub-agents appear when the run ends, not while they run. Reading
+them live would mean polling the export during the run; not done.</li>
 <li>The one-object answer contract is not shown while it streams: a segment that starts with <code>{</code> or a
 code fence is hidden until the run settles.</li>
 </ul>
