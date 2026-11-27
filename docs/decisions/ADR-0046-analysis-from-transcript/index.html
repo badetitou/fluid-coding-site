@@ -1,0 +1,35 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ADR-0046 — Session analysis falls back to the chat transcript · fluid-coding</title><meta name="description" content="- Status: proposed"><meta property="og:title" content="ADR-0046 — Session analysis falls back to the chat transcript · fluid-coding"><meta property="og:description" content="- Status: proposed"><link rel="icon" type="image/svg+xml" href="/fluid-coding-site/demo/logo.svg"><link rel="stylesheet" href="/fluid-coding-site/_astro/SiteLayout.DBjjiOAW.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="container header-inner"><a class="brand" href="/fluid-coding-site/"><img src="/fluid-coding-site/demo/logo.svg" alt="" width="30" height="30"><span>fluid-coding</span></a><nav class="nav-links" aria-label="Main navigation"><a class="nav-link" href="/fluid-coding-site/">Overview</a><a class="nav-link" href="/fluid-coding-site/#how-it-works">How it works</a><a class="nav-link" href="/fluid-coding-site/#faq">FAQ</a><a class="nav-link nav-download" href="/fluid-coding-site/#download">Download</a></nav></div></header><main id="main" class="container"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="/fluid-coding-site/docs/">Docs</a> <span aria-hidden="true">/</span> ADR-0046 — Session analysis falls back to the chat transcript</nav><article class="prose"><h1 id="adr-0046--session-analysis-falls-back-to-the-chat-transcript">ADR-0046 — Session analysis falls back to the chat transcript</h1>
+<ul>
+<li>Status: proposed</li>
+<li>Date: 2026-11-27</li>
+<li>Deciders: Benoit (to validate)</li>
+<li>Amends: ADR-0027 (GenAI trace model), ADR-0028 (session analysis rendering)</li>
+</ul>
+<h2 id="context">Context</h2>
+<p><code>GET /api/session-analysis</code> built its graph only from OTLP spans in <code>.fluid-coding/traces/</code>. In
+practice only opencode exports spans, and their ids do not name the chat they belong to, so every
+conversation opened from the dock showed a lone session node: no turns, no tool calls, no
+sub-agents. Each <code>ChatTurn</code> already stores the run’s <code>ToolActivity</code> list in order, and a sub-agent
+call (Claude’s <code>Task</code>, opencode’s <code>subagent</code>) carries its own nested <code>AgentTranscript</code>.</p>
+<h2 id="decision">Decision</h2>
+<ol>
+<li><strong>The transcript is a span source.</strong> Pure <code>fluid_core::session_graph::transcript_spans</code> turns a
+<code>ChatSession</code> into the span tree the graph already reads: one <code>chat</code> span per turn, one
+<code>execute_tool</code> span per call, and a nested <code>invoke_agent</code> span per sub-agent with its calls under
+it. Spans carry <code>fluid.source = transcript</code>, ids <code>&lt;chat&gt;-t&lt;n&gt;</code> (stable as the transcript grows,
+and valid <code>expand</code> ids), and the call’s input preview as <code>contentRef</code>.</li>
+<li><strong>Telemetry wins when it exists.</strong> The route uses the transcript only for a chat that matched no
+recorded span. No timing is invented: transcript spans have increasing synthetic start times and
+a zero duration, so order is real and the duration totals stay honest.</li>
+<li><strong>Calls after a sub-agent stay with their caller.</strong> The layout closes a sub-agent’s tool batch as
+soon as a call whose parent is outside it arrives, so the caller’s later calls get their own batch
+instead of being counted inside the sub-agent.</li>
+</ol>
+<p>No wire type changes; the contracts and fixtures are untouched.</p>
+<h2 id="consequences">Consequences</h2>
+<ul>
+<li>Every agent (Claude, fluid, opencode, Codex) shows its turns, calls and sub-agents, live while the
+turn is pending, without any telemetry setup.</li>
+<li>Durations and tokens appear only for runs that export telemetry.</li>
+</ul>
+</article><p class="source-note">Source: <a href="https://github.com/badetitou/fluid-coding/blob/main/docs/decisions/ADR-0046-analysis-from-transcript.md">docs/decisions/ADR-0046-analysis-from-transcript.md</a>· synced into this static site by <code>scripts/sync-docs.mjs</code></p></main><footer class="site-footer"><div class="container footer-inner"><span>fluid-coding — a local workbench for reviewing agent-written code.</span><nav class="footer-links" aria-label="Footer navigation"><a class="footer-docs" href="/fluid-coding-site/docs/">Documentation</a><a href="https://github.com/badetitou/fluid-coding">GitHub ↗</a></nav></div></footer></body></html>
