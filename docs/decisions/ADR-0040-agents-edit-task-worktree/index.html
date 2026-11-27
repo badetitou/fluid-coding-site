@@ -68,7 +68,8 @@ switch branches. Edit + run also runs the brief’s checks, fixes failures, and 
 current branch with the brief’s commit footer. The answer is the same JSON object with
 <code>messages</code> (what changed, check results) and no patches.</li>
 <li><strong>Permission flags are per provider, added by the adapter.</strong> A pure table maps provider and access
-to extra argv inserted before the prompt. A flag already present in the user’s command wins.
+to extra argv inserted before the prompt. A flag already present in the user’s command wins; for
+Claude, any <code>--permission-mode</code> the user set also suppresses shell access.
 <table>
 <thead>
 <tr>
@@ -85,7 +86,7 @@ to extra argv inserted before the prompt. A flag already present in the user’s
 </tr>
 <tr>
 <td><code>opencode</code></td>
-<td><code>--auto</code></td>
+<td>none (edits by default)</td>
 <td><code>--auto</code></td>
 </tr>
 <tr>
@@ -108,9 +109,12 @@ worktree is the review unit.</li>
 </ul>
 <p>Negative:</p>
 <ul>
-<li>In the worktree, opencode <code>--auto</code> and Claude <code>--allowedTools=Bash</code> allow any shell command. The
-isolation is a git worktree, not a sandbox: a hostile command can still reach the rest of the
-machine. The prompt forbids leaving the worktree; nothing enforces it.</li>
+<li>Isolation is prompt-only. In edit + run, opencode <code>--auto</code> and Claude <code>--allowedTools=Bash</code> approve
+any shell command. The worktree lives at <code>&lt;repo&gt;/.fluid-coding/worktrees/…</code>, so the main checkout
+is <code>../..</code> from the agent’s cwd: an agent can still write there or <code>git push</code>. The prompt forbids
+it; nothing enforces it. A git worktree is not a sandbox.</li>
+<li>In edit (no run), opencode’s default permissions still allow shell; “do not run commands that
+change state” is enforced for Claude only. No caller uses edit today: Start Work sends <code>auto</code>.</li>
 <li>Work done in the worktree does not appear in Review’s patch list; users open the worktree or its
 branch. Showing the worktree diff in Review is a follow-up.</li>
 <li>Codex (<code>codex exec</code> is read-only by default) and Copilot (<code>copilot -p</code> needs tool approval) still
